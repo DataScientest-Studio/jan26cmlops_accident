@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
-  preprocess_v06042026.py — Preprocessing amélioré (basé sur Seb + final)
+  preprocess_focus_tues.py — Preprocessing amélioré (basé sur Seb + final)
 =============================================================================
 
 OBJECTIF : Transformer les données brutes PostgreSQL en dataset prêt pour ML.
@@ -34,8 +34,8 @@ PHASES :
   PHASE 3 : Nettoyage + feature engineering
   PHASE 4 : Création de grav_bin + bilan + sauvegarde finale
 
-Usage :
-  python preprocess_v06042026.py
+Usage (depuis la racine du repo) :
+  python src/data/preprocess_focus_tues.py
 
 Auteur : Projet MLOps Accidents — DataScientest
 Date   : Avril 2026
@@ -66,11 +66,16 @@ DB_PASSWORD = "1234"
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-OUTPUT_DIR         = os.path.dirname(os.path.abspath(__file__))
-REPORT_FILE        = os.path.join(OUTPUT_DIR, "anomalies_report_v06042026.txt")
-CHECKPOINT_RAW     = os.path.join(OUTPUT_DIR, "checkpoint_01_raw.parquet")        # Après jointure SQL
-CHECKPOINT_BEFORE  = os.path.join(OUTPUT_DIR, "checkpoint_02_before_clean.parquet") # Avant nettoyage (audit)
-PARQUET_FINAL      = os.path.join(OUTPUT_DIR, "dataset_v06042026.parquet")         # Dataset final
+# Racine du repo = 2 niveaux au-dessus de src/data/
+REPO_ROOT          = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR           = os.path.join(REPO_ROOT, "src", "data")
+REPORTS_DIR        = os.path.join(REPO_ROOT, "reports")
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+REPORT_FILE        = os.path.join(REPORTS_DIR, "anomalies_report_focus_tues.txt")
+CHECKPOINT_RAW     = os.path.join(DATA_DIR, "checkpoint_01_raw.parquet")             # Après jointure SQL
+CHECKPOINT_BEFORE  = os.path.join(DATA_DIR, "checkpoint_02_before_clean.parquet")    # Avant nettoyage (audit)
+PARQUET_FINAL      = os.path.join(DATA_DIR, "dataset_focus_tues.parquet")            # Dataset final
 
 # Colonnes catégorielles utilisant -1 pour "non renseigné"
 COLS_NR = [
@@ -81,7 +86,7 @@ COLS_NR = [
 ]
 
 print("=" * 70)
-print("  PREPROCESSING v06042026 — Indemne vs Reste (focus Tués)")
+print("  PREPROCESSING focus_tues — Indemne vs Reste (focus Tués)")
 print("=" * 70)
 
 lines = []
@@ -163,7 +168,7 @@ print("\n[PHASE 2] Rapport d'anomalies AVANT nettoyage...")
 n_total = len(df)
 
 add("=" * 68)
-add(f"  RAPPORT D'ANOMALIES — v06042026")
+add(f"  RAPPORT D'ANOMALIES — focus_tues")
 add(f"  Généré le : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 add(f"  Lignes totales (après jointure) : {n_total:,}")
 add("=" * 68)
@@ -385,7 +390,7 @@ n_blesse    = (df["grav"] == 4).sum()
 bilan = [
     "",
     "═" * 68,
-    "  BILAN FINAL — preprocess_v06042026.py",
+    "  BILAN FINAL — preprocess_focus_tues.py",
     "═" * 68,
     f"  Lignes chargées (jointure SQL)            : {n_avant:>10,}",
     f"  Lignes finales (après nettoyage)          : {n_final:>10,}",
@@ -400,7 +405,7 @@ bilan = [
     f"  Ratio reste/indemne                       : {n_reste/n_indemne:>9.2f}x",
     "  ─" * 34,
     f"  NOTE : 'grav' est conservé dans le dataset",
-    f"         → utilisé comme sample_weight dans training_v06042026.py",
+    f"         → utilisé comme sample_weight dans training_focus_tues.py",
     f"         (tués×8, hospitalisés×2, blessés légers×1.5, indemnes×1)",
     "═" * 68,
     f"  Fichiers produits :",
@@ -425,4 +430,4 @@ print(f"    Taille : {os.path.getsize(PARQUET_FINAL) / 1024 / 1024:.1f} MB")
 print("\n" + "=" * 70)
 print("  ✓ PREPROCESSING TERMINÉ AVEC SUCCÈS")
 print("=" * 70)
-print(f"\n  Prochaine étape : python training_v06042026.py")
+print(f"\n  Prochaine étape : python src/models/training_focus_tues.py")

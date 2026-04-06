@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
-  training_v06042026.py — XGBoost avec focus sur la détection des Tués
+  training_focus_tues.py — XGBoost avec focus sur la détection des Tués
 =============================================================================
 
 OBJECTIF : Entraîner un XGBoost pour prédire si un usager est INDEMNE ou non,
@@ -36,8 +36,8 @@ PHASES :
   PHASE 7 : Sauvegarde finale
 
 Usage :
-  python training_v06042026.py
-  (nécessite d'avoir lancé preprocess_v06042026.py auparavant)
+  python training_focus_tues.py
+  (nécessite d'avoir lancé preprocess_focus_tues.py auparavant)
 
 Auteur : Projet MLOps Accidents — DataScientest
 Date   : Avril 2026
@@ -84,20 +84,27 @@ from xgboost import XGBClassifier
 # CONFIGURATION
 # =============================================================================
 
-OUTPUT_DIR     = os.path.dirname(os.path.abspath(__file__))
+# Racine du repo = 2 niveaux au-dessus de src/models/
+REPO_ROOT      = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR       = os.path.join(REPO_ROOT, "src", "data")
+MODELS_DIR     = os.path.join(REPO_ROOT, "models")
+REPORTS_DIR    = os.path.join(REPO_ROOT, "reports")
+FIGURES_DIR    = os.path.join(REPORTS_DIR, "figures")
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(FIGURES_DIR, exist_ok=True)
 
 # Fichiers d'entrée
-PARQUET_FINAL  = os.path.join(OUTPUT_DIR, "dataset_v06042026.parquet")
+PARQUET_FINAL  = os.path.join(DATA_DIR, "dataset_focus_tues.parquet")
 
 # Checkpoints et fichiers de sortie
-CHECKPOINT_MODEL_INTERMED = os.path.join(OUTPUT_DIR, "checkpoint_03_model_intermed.pkl")
-MODEL_FILE     = os.path.join(OUTPUT_DIR, "model_v06042026.pkl")
-THRESHOLD_FILE = os.path.join(OUTPUT_DIR, "threshold_v06042026.pkl")
-REPORT_FILE    = os.path.join(OUTPUT_DIR, "training_report_v06042026.txt")
-ROC_PNG        = os.path.join(OUTPUT_DIR, "roc_curve_v06042026.png")
-PR_PNG         = os.path.join(OUTPUT_DIR, "pr_curve_v06042026.png")
-FI_PNG         = os.path.join(OUTPUT_DIR, "feature_importance_v06042026.png")
-CM_PNG         = os.path.join(OUTPUT_DIR, "confusion_matrix_v06042026.png")
+CHECKPOINT_MODEL_INTERMED = os.path.join(MODELS_DIR, "checkpoint_03_model_intermed.pkl")
+MODEL_FILE     = os.path.join(MODELS_DIR,  "model_focus_tues.pkl")
+THRESHOLD_FILE = os.path.join(MODELS_DIR,  "threshold_focus_tues.pkl")
+REPORT_FILE    = os.path.join(REPORTS_DIR, "training_report_focus_tues.txt")
+ROC_PNG        = os.path.join(FIGURES_DIR, "roc_curve_focus_tues.png")
+PR_PNG         = os.path.join(FIGURES_DIR, "pr_curve_focus_tues.png")
+FI_PNG         = os.path.join(FIGURES_DIR, "feature_importance_focus_tues.png")
+CM_PNG         = os.path.join(FIGURES_DIR, "confusion_matrix_focus_tues.png")
 
 TEST_SIZE      = 0.20
 RANDOM_STATE   = 42
@@ -116,7 +123,7 @@ WEIGHTS = {1: 1.0, 2: 8.0, 3: 2.0, 4: 1.5}
 COLS_FLOAT = ["lat", "long", "lartpc", "larrout"]
 
 print("=" * 70)
-print("  TRAINING v06042026 — XGBoost focus Tués")
+print("  TRAINING focus_tues — XGBoost focus Tués")
 print("=" * 70)
 
 report_lines = []
@@ -134,7 +141,7 @@ t0 = time.time()
 
 if not os.path.exists(PARQUET_FINAL):
     print(f"  ✗ Fichier introuvable : {PARQUET_FINAL}")
-    print("    Lancez d'abord : python preprocess_v06042026.py")
+    print("    Lancez d'abord : python preprocess_focus_tues.py")
     sys.exit(1)
 
 df = pd.read_parquet(PARQUET_FINAL)
@@ -145,7 +152,7 @@ print(f"  ✓ Dataset chargé : {len(df):,} lignes × {df.shape[1]} colonnes ({e
 for col_required in ["grav_bin", "grav"]:
     if col_required not in df.columns:
         print(f"  ✗ Colonne manquante : '{col_required}'")
-        print("    Relancez preprocess_v06042026.py")
+        print("    Relancez preprocess_focus_tues.py")
         sys.exit(1)
 
 # Statistiques sur la cible
@@ -456,7 +463,7 @@ ax.plot(fpr, tpr, color="steelblue", lw=2, label=f"XGBoost (AUC = {roc_auc:.3f})
 ax.plot([0, 1], [0, 1], "k--", lw=1, alpha=0.6, label="Aléatoire (AUC = 0.5)")
 ax.set_xlabel("Taux de faux positifs", fontsize=12)
 ax.set_ylabel("Taux de vrais positifs (Recall)", fontsize=12)
-ax.set_title("Courbe ROC — XGBoost v06042026\nIndemne vs Reste (focus Tués)", fontsize=12)
+ax.set_title("Courbe ROC — focus Tués\nIndemne vs Reste (focus Tués)", fontsize=12)
 ax.legend(loc="lower right", fontsize=10)
 ax.grid(True, alpha=0.3)
 ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
@@ -478,7 +485,7 @@ ax.axhline(y=baseline, color="gray", linestyle=":", lw=1.5,
            label=f"Baseline ({baseline:.2f})", alpha=0.7)
 ax.set_xlabel("Recall classe 1", fontsize=12)
 ax.set_ylabel("Precision classe 1", fontsize=12)
-ax.set_title("Courbe Precision-Recall — XGBoost v06042026\n(★ = seuil optimal pour les Tués)", fontsize=12)
+ax.set_title("Courbe Precision-Recall — focus Tués\n(★ = seuil optimal pour les Tués)", fontsize=12)
 ax.legend(loc="upper right", fontsize=9)
 ax.grid(True, alpha=0.3)
 ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
@@ -496,7 +503,7 @@ try:
     fig, ax = plt.subplots(figsize=(10, 8))
     ax.barh(fi_df["Variable"], fi_df["Importance"], color="steelblue", edgecolor="white")
     ax.set_xlabel("Importance (gain)", fontsize=12)
-    ax.set_title("Top 20 variables — XGBoost v06042026\n(sample_weights focus Tués)", fontsize=12)
+    ax.set_title("Top 20 variables — focus Tués\n(sample_weights focus Tués)", fontsize=12)
     ax.grid(True, axis="x", alpha=0.3)
     plt.tight_layout()
     plt.savefig(FI_PNG, dpi=150, bbox_inches="tight")
@@ -545,7 +552,7 @@ print(f"  ✓ Seuil optimal sauvegardé : {THRESHOLD_FILE}  (valeur : {optimal_s
 
 # Rapport texte final
 radd("\n" + "=" * 68)
-radd(f"  FICHIERS PRODUITS — training_v06042026.py")
+radd(f"  FICHIERS PRODUITS — training_focus_tues.py")
 radd("=" * 68)
 radd(f"  Checkpoints :")
 radd(f"    Modèle intermédiaire : {CHECKPOINT_MODEL_INTERMED}")
@@ -581,8 +588,8 @@ print("=" * 70)
 print("""
   POUR PRÉDIRE SUR DE NOUVELLES DONNÉES :
     import joblib
-    model     = joblib.load("model_v06042026.pkl")
-    threshold = joblib.load("threshold_v06042026.pkl")
+    model     = joblib.load("model_focus_tues.pkl")
+    threshold = joblib.load("threshold_focus_tues.pkl")
     probas    = model.predict_proba(X_new)[:, 1]
     preds     = (probas >= threshold).astype(int)
     # preds=0 → Indemne | preds=1 → Non-indemne (Tué/Hospitalisé/Blessé)
