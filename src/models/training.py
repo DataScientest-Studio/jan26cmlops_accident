@@ -6,6 +6,13 @@ def train_model():
     from sklearn.model_selection import train_test_split
     from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
     from sklearn.utils.class_weight import compute_sample_weight
+    import mlflow
+    import mlflow.xgboost
+    from mlflow.tracking import MlflowClient
+
+    MLFLOW_TRACKING_URI = "http://localhost:8080"
+    MODEL_NAME          = "gravite-accident"
+    METRIC_KEY          = "f1_macro"
 
     conn_params = {
         "dbname": "mlops_accidents",
@@ -15,6 +22,17 @@ def train_model():
         "port": 5432
     }
 
+    n_estimators     = 400
+    max_depth        = 6
+    learning_rate    = 0.01
+    subsample        = 0.8
+    colsample_bytree = 0.8
+    eval_metric      = "logloss"
+    tree_method      = "hist"
+    n_jobs           = -1
+    random_state     = 42
+    verbosity        = 0
+    
     conn = psycopg2.connect(**conn_params)
 
     carac = pd.read_sql("SELECT * FROM caracteristics;", conn)
@@ -47,16 +65,16 @@ def train_model():
     )
 
     model = xgb.XGBClassifier(
-        n_estimators     = 400,
-        max_depth        = 8,
-        learning_rate    = 0.05,
-        subsample        = 0.8,
-        colsample_bytree = 0.8,
-        eval_metric      = "logloss",
-        tree_method      = "hist",
-        n_jobs           = -1,
-        random_state     = 42,
-        verbosity        = 0
+        n_estimators     = n_estimators,
+        max_depth        = max_depth,
+        learning_rate    = learning_rate,
+        subsample        = subsample,
+        colsample_bytree = colsample_bytree,
+        eval_metric      = eval_metric,
+        tree_method      = tree_method,
+        n_jobs           = n_jobs,
+        random_state     = random_state,
+        verbosity        = verbosity
     )
 
     sample_weights = compute_sample_weight(
@@ -82,7 +100,57 @@ def train_model():
     print("\n===== CLASSIFICATION REPORT =====")
     print(classification_report(y_test, y_pred))
 
-    joblib.dump(model, "xgb_model.pkl")
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment("accidentologie-gravite")
+    client = MlflowClient()  
+
+    with mlflow.start_run() as run:
+        run_id = run.info.run_id
+
+        # Params
+        mlflow.log_param("n_estimators",     n_estimators)
+        mlflow.log_param("max_depth",        max_depth)
+        mlflow.log_param("learning_rate",    learning_rate)
+        mlflow.log_param("subsample",        subsample)
+        mlflow.log_param("colsample_bytree", colsample_bytree)
+        mlflow.log_param("eval_metric",      eval_metric)
+        mlflow.log_param("tree_method",      tree_method)
+        mlflow.log_param("n_train",          len(X_train))
+        mlflow.log_param("n_test",           len(X_test))
+
+        # Métriques
+        mlflow.log_metric("accuracy", round(float(acc), 4))
+        mlflow.log_metric("f1_macro", round(float(f1),  4))
+
+        # Modèle
+        mlflow.xgboost.log_model(model, artifact_path="model")
+
+        # Sauvegarde locale conservée
+        joblib.dump(model, "xgb_model.pkl")
+
+        # Comparaison & promotion
+        mv          = mlflow.register_model(f"runs:/{run_id}/model", MODEL_NAME)
+        new_version = mv.version
+
+        prod_versions = client.get_latest_versions(MODEL_NAME, stages=["Production"])
+
+        if not prod_versions:
+            client.transition_model_version_stage(MODEL_NAME, new_version, "Production")
+            print(f"\n[Registry] v{new_version} → Production (premier modèle, F1={f1:.4f})")
+        else:
+            prod_f1 = client.get_run(prod_versions[0].run_id).data.metrics.get(METRIC_KEY, 0.0)
+            delta   = f1 - prod_f1
+            mlflow.log_metric("delta_f1", round(delta, 4))
+
+            if f1 > prod_f1:
+                client.transition_model_version_stage(MODEL_NAME, prod_versions[0].version, "Archived")
+                client.transition_model_version_stage(MODEL_NAME, new_version, "Production")
+                print(f"\n[Registry] v{new_version} → Production (+{delta:.4f}) | v{prod_versions[0].version} → Archived")
+            else:
+                client.transition_model_version_stage(MODEL_NAME, new_version, "Staging")
+                print(f"\n[Registry] v{new_version} → Staging (inférieur de {abs(delta):.4f})")
+
+    print(f"\n[MLflow] UI → http://localhost:8080")
 
     return {"status": "training completed",
     "accuracy": float(acc),
