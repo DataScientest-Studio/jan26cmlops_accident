@@ -90,3 +90,11 @@ target/
 .mypy_cache/
 
 commande_MLflow.txt
+
+# MLflow local tracking
+mlruns/
+mlartifacts/
+
+# Checkpoints intermediaires (regenerables)
+src/data/checkpoint_*.parquet
+models/checkpoint_*.pkl

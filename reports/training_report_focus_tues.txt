@@ -1,0 +1,135 @@
+
+======================================================================
+  TRAIN_MODEL.PY - XGBoost binaire focus Tues
+======================================================================
+======================================================================
+  PHASE 1 : Chargement PostgreSQL + jointure holidays
+======================================================================
+  holidays : 131 lignes
+  users        :  1,876,005 lignes
+  carac        :    839,985 lignes
+  places       :    839,985 lignes
+  vehicles     :  1,433,389 lignes
+  Apres jointure principale : 1,876,005 lignes x 45 colonnes
+  Jours feries trouves : 36,175
+  Apres dedup : 1,876,005 lignes
+  Checkpoint sauve : D:\Projets Claude\Projet Accident\jan26cmlops_accident\src\data\checkpoint_01_raw.parquet
+  Duree phase 1 : 15.7s
+
+======================================================================
+  PHASE 2 : Nettoyage + feature engineering + cible binaire
+======================================================================
+  lat : 1,321,219 valeurs 0 -> NaN (lignes conservees)
+  long : 1,373,877 valeurs 0 -> NaN (lignes conservees)
+  Feature 'age' creee (mediane = nan)
+  Feature 'heure' creee (0-23)
+  Feature 'is_weekend' creee (534,348 weekend)
+  Cible binaire :
+    grav_bin=0 (Indemne) :    764,874
+    grav_bin=1 (Reste)   :  1,111,131
+      dont Tues (grav=2) :     50,589
+      dont Hospit (grav=3):    393,669
+      dont Legers (grav=4):    666,873
+  Lignes finales : 1,876,005 (vs 1,876,005 avant nettoyage)
+  Checkpoint sauve : D:\Projets Claude\Projet Accident\jan26cmlops_accident\src\data\checkpoint_02_clean.parquet
+  Duree phase 2 : 5.0s
+
+======================================================================
+  PHASE 3 : Correlations Cramer's V avec grav_bin
+======================================================================
+  Variable                    Cramer V
+  ------------------------- ----------
+  id_user                       1.0000
+  secu                          0.4595
+  catv                          0.3866
+  catu                          0.2730
+  place                         0.2727
+  manv                          0.2499
+  actp                          0.2349
+  etatp                         0.2333
+  locp                          0.2271
+  obs                           0.1869
+  choc                          0.1839
+  col                           0.1731
+  an_nais                       0.1613
+  trajet                        0.1610
+  obsm                          0.1574
+  situ                          0.1075
+  hrmn                          0.0853
+  sexe                          0.0819
+  plan                          0.0717
+  agg                           0.0693
+
+  Features selectionnees (V > 0.01) : 37
+  Duree phase 3 : 12.6s
+
+======================================================================
+  PHASE 4 : Entrainement XGBoost avec sample weights focus tues
+======================================================================
+  Features : 37 colonnes
+  Echantillons : 1,876,005
+  Train : 1,500,804 | Test : 375,201
+  Poids : Tue=x8.0, Hospit=x2.0, Leger=x1.5, Indemne=x1.0
+  Checkpoint modele : D:\Projets Claude\Projet Accident\jan26cmlops_accident\models\checkpoint_03_model_intermed.pkl
+  Duree phase 4 : 9.5s
+
+======================================================================
+  PHASE 5 : Evaluation globale + focus Tues
+======================================================================
+
+  --- Metriques globales (seuil=0.5) ---
+  Accuracy  : 0.8064
+  F1 macro  : 0.7911
+  Precision : 0.7938
+  Recall    : 0.9094
+  AUC-ROC   : 0.8990
+
+  --- Classification Report ---
+              precision    recall  f1-score   support
+
+     Indemne       0.83      0.66      0.73    152975
+       Reste       0.79      0.91      0.85    222226
+
+    accuracy                           0.81    375201
+   macro avg       0.81      0.78      0.79    375201
+weighted avg       0.81      0.81      0.80    375201
+
+  --- Focus TUES (grav=2) ---
+  Tues dans le test set : 10049
+  Tues detectes (pred=1) : 9912
+  Recall Tues (seuil=0.5) : 0.9864
+
+======================================================================
+  PHASE 6 : Optimisation du seuil (recall Tues >= 75%)
+======================================================================
+  Seuil optimal : 0.67
+  Accuracy      : 0.8173
+  F1 macro      : 0.8124
+  Precision     : 0.8599
+  Recall global : 0.8261
+  Recall Tues   : 0.9552
+
+  --- Classification Report (seuil=0.67) ---
+              precision    recall  f1-score   support
+
+     Indemne       0.76      0.80      0.78    152975
+       Reste       0.86      0.83      0.84    222226
+
+    accuracy                           0.82    375201
+   macro avg       0.81      0.82      0.81    375201
+weighted avg       0.82      0.82      0.82    375201
+
+
+======================================================================
+  PHASE 7 : Visualisations
+======================================================================
+  ROC curve : D:\Projets Claude\Projet Accident\jan26cmlops_accident\reports\figures\roc_curve_focus_tues.png
+  PR curve  : D:\Projets Claude\Projet Accident\jan26cmlops_accident\reports\figures\pr_curve_focus_tues.png
+  Feature importance : D:\Projets Claude\Projet Accident\jan26cmlops_accident\reports\figures\feature_importance_focus_tues.png
+  Confusion matrix : D:\Projets Claude\Projet Accident\jan26cmlops_accident\reports\figures\confusion_matrix_focus_tues.png
+
+======================================================================
+  PHASE 9 : Sauvegarde finale
+======================================================================
+  Modele   : D:\Projets Claude\Projet Accident\jan26cmlops_accident\models\model_focus_tues.pkl
+  Seuil    : D:\Projets Claude\Projet Accident\jan26cmlops_accident\models\threshold_focus_tues.pkl

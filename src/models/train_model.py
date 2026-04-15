@@ -65,8 +65,12 @@ from sklearn.metrics import (
 import mlflow
 import mlflow.xgboost
 from mlflow.tracking import MlflowClient
+from dotenv import load_dotenv
 
 warnings.filterwarnings("ignore")
+
+# Charger les variables d'environnement depuis .env (racine du projet)
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
 
 # ============================================================================
 #  CONFIGURATION
@@ -94,13 +98,13 @@ PR_PNG = os.path.join(FIGURES_DIR, "pr_curve_focus_tues.png")
 FI_PNG = os.path.join(FIGURES_DIR, "feature_importance_focus_tues.png")
 CM_PNG = os.path.join(FIGURES_DIR, "confusion_matrix_focus_tues.png")
 
-# PostgreSQL
+# PostgreSQL (lu depuis .env, valeurs par defaut si absent)
 CONN_PARAMS = {
-    "dbname": "mlops_accidents",
-    "user": "postgres",
-    "password": "admin",
-    "host": "localhost",
-    "port": 5432,
+    "dbname": os.getenv("POSTGRES_DB", "mlops_accidents"),
+    "user": os.getenv("POSTGRES_USER", "postgres"),
+    "password": os.getenv("POSTGRES_PASSWORD", "admin"),
+    "host": os.getenv("POSTGRES_HOST", "localhost"),
+    "port": int(os.getenv("POSTGRES_PORT", "5432")),
 }
 
 # Sample weights focus tues
@@ -126,10 +130,10 @@ XGB_PARAMS = dict(
 TARGET_RECALL_TUE = 0.75
 TARGET_PREC_GLOBALE = 0.55
 
-# MLflow
-MLFLOW_TRACKING_URI = "http://localhost:8080"
-MLFLOW_EXPERIMENT = "accidentologie-focus-tues"
-MODEL_REGISTRY_NAME = "gravite-focus-tues"
+# MLflow (lu depuis .env)
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "accidentologie-focus-tues")
+MODEL_REGISTRY_NAME = os.getenv("MLFLOW_REGISTRY_NAME", "gravite-focus-tues")
 
 # Colonnes a supprimer (identifiants, texte libre, GPS brut)
 COLS_TO_DROP = [

@@ -20,6 +20,10 @@ import numpy as np
 import pandas as pd
 import psycopg2
 import joblib
+from dotenv import load_dotenv
+
+# Charger les variables d'environnement depuis .env (racine du projet)
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
 
 # ============================================================================
 #  CONFIGURATION
@@ -30,11 +34,11 @@ MODEL_FILE = os.path.join(MODELS_DIR, "model_focus_tues.pkl")
 THRESHOLD_FILE = os.path.join(MODELS_DIR, "threshold_focus_tues.pkl")
 
 CONN_PARAMS = {
-    "dbname": "mlops_accidents",
-    "user": "postgres",
-    "password": "admin",
-    "host": "localhost",
-    "port": 5432,
+    "dbname": os.getenv("POSTGRES_DB", "mlops_accidents"),
+    "user": os.getenv("POSTGRES_USER", "postgres"),
+    "password": os.getenv("POSTGRES_PASSWORD", "admin"),
+    "host": os.getenv("POSTGRES_HOST", "localhost"),
+    "port": int(os.getenv("POSTGRES_PORT", "5432")),
 }
 
 # Colonnes a supprimer (meme liste que train_model.py)
