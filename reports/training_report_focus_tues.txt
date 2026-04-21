@@ -14,7 +14,7 @@
   Jours feries trouves : 35,608
   Apres dedup : 1,851,323 lignes
   Checkpoint sauve : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\src\data\checkpoint_01_raw.parquet
-  Duree phase 1 : 96.3s
+  Duree phase 1 : 50.5s
 
 ======================================================================
   PHASE 2 : Nettoyage + feature engineering + cible binaire
@@ -34,7 +34,7 @@
       dont Legers (grav=4):    655,949
   Lignes finales : 1,851,323 (vs 1,851,323 avant nettoyage)
   Checkpoint sauve : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\src\data\checkpoint_02_clean.parquet
-  Duree phase 2 : 58.2s
+  Duree phase 2 : 48.1s
 
 ======================================================================
   PHASE 3 : Correlations Cramer's V avec grav_bin
@@ -63,7 +63,7 @@
   catr                          0.0609
 
   Features selectionnees (V > 0.01) : 36
-  Duree phase 3 : 12.0s
+  Duree phase 3 : 4.5s
 
 ======================================================================
   PHASE 4 : Entrainement XGBoost avec sample weights focus tues
@@ -73,7 +73,7 @@
   Train : 1,481,058 | Test : 370,265
   Poids : Tue=x8.0, Hospit=x2.0, Leger=x1.5, Indemne=x1.0
   Checkpoint modele : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\models\checkpoint_03_model_intermed.pkl
-  Duree phase 4 : 33.6s
+  Duree phase 4 : 32.8s
 
 ======================================================================
   PHASE 5 : Evaluation globale + focus Tues
