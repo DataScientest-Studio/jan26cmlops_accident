@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
-from training import train_model
-from predict import predict_model
+from train_model import train_model
+from predict_model import predict_model
 
 api = FastAPI(
     title="API - Prédiction de la sévérité d'un accidents",

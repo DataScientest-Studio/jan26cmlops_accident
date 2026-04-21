@@ -131,7 +131,7 @@ TARGET_RECALL_TUE = 0.75
 TARGET_PREC_GLOBALE = 0.55
 
 # MLflow (lu depuis .env)
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:8080")
 MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "accidentologie-focus-tues")
 MODEL_REGISTRY_NAME = os.getenv("MLFLOW_REGISTRY_NAME", "gravite-focus-tues")
 
