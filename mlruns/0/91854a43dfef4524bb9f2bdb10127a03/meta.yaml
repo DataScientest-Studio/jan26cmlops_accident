@@ -1,0 +1,16 @@
+artifact_uri: file:///C:/Users/sebas/Documents/GitHub/jan26cmlops_accident/mlruns/0/91854a43dfef4524bb9f2bdb10127a03/artifacts
+deleted_time: 1775208382852
+end_time: 1775208243561
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: deleted
+run_id: 91854a43dfef4524bb9f2bdb10127a03
+run_name: magnificent-cat-358
+run_uuid: 91854a43dfef4524bb9f2bdb10127a03
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1775208243529
+status: 4
+tags: []
+user_id: sebas

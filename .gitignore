@@ -8,6 +8,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
+venv/
 build/
 develop-eggs/
 dist/
@@ -87,3 +88,13 @@ target/
 
 # Mypy cache
 .mypy_cache/
+
+commande_MLflow.txt
+
+# MLflow local tracking
+mlruns/
+mlartifacts/
+
+# Checkpoints intermediaires (regenerables)
+src/data/checkpoint_*.parquet
+models/checkpoint_*.pkl
