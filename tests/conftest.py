@@ -8,6 +8,9 @@ reutilisables dans tous les tests.
 ============================================================================
 RECAPITULATIF DES TESTS CI/CD
 ============================================================================
+Reparer CI  : correction du workflow GitHub Actions (python-app.yml)
+Ecrire tests : suite de tests automatises (ce dossier tests/)
+============================================================================
 
 test_preprocessing.py (11 tests) - Feature engineering
   TestFeatureAge:
