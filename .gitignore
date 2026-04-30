@@ -98,3 +98,12 @@ mlartifacts/
 # Checkpoints intermediaires (regenerables)
 src/data/checkpoint_*.parquet
 models/checkpoint_*.pkl
+
+# Modèles et rapports — gérés par DVC
+models/*.pkl
+reports/*.txt
+reports/figures/*.png
+
+# Fichiers DVC (ceux-ci doivent rester dans Git)
+!models/*.dvc
+!reports/*.dvc

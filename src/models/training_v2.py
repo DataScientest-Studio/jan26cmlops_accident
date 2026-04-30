@@ -34,7 +34,7 @@ PHASES :
   9 : Sauvegarde finale
 
 Usage :
-  python src/models/train_model.py
+  python src/models/training_v2.py
   (necessite PostgreSQL avec les tables chargees via fill_database.py)
 
 Auteur : Projet MLOps Accidents - DataScientest (Theodys)
@@ -66,6 +66,9 @@ import mlflow
 import mlflow.xgboost
 from mlflow.tracking import MlflowClient
 from dotenv import load_dotenv
+
+import subprocess
+import yaml
 
 warnings.filterwarnings("ignore")
 
@@ -571,7 +574,7 @@ def phase7_plots(model, X_test, y_test, y_proba, best_threshold, feature_cols):
 # ============================================================================
 #  PHASE 8 : MLFLOW TRACKING + MODEL REGISTRY
 # ============================================================================
-def phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_tue_opt, X_train, X_test):
+def phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_tue_opt, X_train, X_test, dvc_hashes):
     radd("")
     radd("=" * 70)
     radd("  PHASE 8 : MLflow tracking")
@@ -588,26 +591,30 @@ def phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_t
             # Params
             for k, v in XGB_PARAMS.items():
                 mlflow.log_param(k, v)
-            mlflow.log_param("n_train", len(X_train))
-            mlflow.log_param("n_test", len(X_test))
-            mlflow.log_param("target", "binaire_focus_tues")
-            mlflow.log_param("weight_tue", WEIGHTS_GRAV[2])
-            mlflow.log_param("weight_hospit", WEIGHTS_GRAV[3])
-            mlflow.log_param("weight_leger", WEIGHTS_GRAV[4])
+            mlflow.log_param("n_train",           len(X_train))
+            mlflow.log_param("n_test",            len(X_test))
+            mlflow.log_param("target",            "binaire_focus_tues")
+            mlflow.log_param("weight_tue",        WEIGHTS_GRAV[2])
+            mlflow.log_param("weight_hospit",     WEIGHTS_GRAV[3])
+            mlflow.log_param("weight_leger",      WEIGHTS_GRAV[4])
             mlflow.log_param("threshold_optimal", best_threshold)
 
-            # Metriques (seuil 0.5)
-            mlflow.log_metric("accuracy", round(float(acc), 4))
-            mlflow.log_metric("f1_macro", round(float(f1), 4))
-            mlflow.log_metric("auc_roc", round(float(auc), 4))
+            # Enregistrement Hash DVC
+            for label, hash_val in dvc_hashes.items():
+                mlflow.log_param(f"dvc_hash_{label}", hash_val)
+
+            # Métriques (seuil 0.5)
+            mlflow.log_metric("accuracy",        round(float(acc), 4))
+            mlflow.log_metric("f1_macro",        round(float(f1), 4))
+            mlflow.log_metric("auc_roc",         round(float(auc), 4))
             mlflow.log_metric("recall_tues_0.5", round(float(recall_tue), 4))
 
-            # Metriques (seuil optimal)
-            mlflow.log_metric("f1_macro_opt", round(float(f1_opt), 4))
+            # Métriques (seuil optimal)
+            mlflow.log_metric("f1_macro_opt",    round(float(f1_opt), 4))
             mlflow.log_metric("recall_tues_opt", round(float(rec_tue_opt), 4))
-            mlflow.log_metric("threshold", round(float(best_threshold), 4))
+            mlflow.log_metric("threshold",       round(float(best_threshold), 4))
 
-            # Modele
+            # Modèle
             mlflow.xgboost.log_model(model, artifact_path="model")
 
             # Artefacts
@@ -617,8 +624,8 @@ def phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_t
             if os.path.exists(REPORT_FILE):
                 mlflow.log_artifact(REPORT_FILE)
 
-            # Model Registry
-            mv = mlflow.register_model(f"runs:/{run_id}/model", MODEL_REGISTRY_NAME)
+            # Model Registry + comparaison
+            mv          = mlflow.register_model(f"runs:/{run_id}/model", MODEL_REGISTRY_NAME)
             new_version = mv.version
 
             prod_versions = client.get_latest_versions(MODEL_REGISTRY_NAME, stages=["Production"])
@@ -627,7 +634,7 @@ def phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_t
                 radd(f"  [Registry] v{new_version} -> Production (premier modele)")
             else:
                 prod_f1 = client.get_run(prod_versions[0].run_id).data.metrics.get("f1_macro_opt", 0.0)
-                delta = f1_opt - prod_f1
+                delta   = f1_opt - prod_f1
                 mlflow.log_metric("delta_f1", round(delta, 4))
                 if f1_opt > prod_f1:
                     client.transition_model_version_stage(MODEL_REGISTRY_NAME, prod_versions[0].version, "Archived")
@@ -670,6 +677,77 @@ def phase9_save(model, best_threshold, feature_cols):
     radd("  TERMINE - Prediction via : python src/models/predict_model.py")
     radd("=" * 70)
 
+    # DVC : tracking modèles et autres fichiers
+    dvc_hashes = {}
+    dvc_files = {
+        "model":     MODEL_FILE,
+        "threshold": THRESHOLD_FILE,
+        "report":    REPORT_FILE,
+    }
+    for label, filepath in dvc_files.items():
+        try:
+            subprocess.run(["dvc", "add", filepath], check=True, capture_output=True)
+            dvc_file = filepath + ".dvc"
+            with open(dvc_file, "r") as f:
+                dvc_meta = yaml.safe_load(f)
+            dvc_hashes[label] = dvc_meta["outs"][0]["md5"]
+            radd(f"  DVC [{label}] hash : {dvc_hashes[label]}")
+        except Exception as e:
+            radd(f"  [WARN] DVC indisponible pour {label} : {e}")
+            dvc_hashes[label] = "unavailable"
+
+    # DVC : tracking datasets
+    dataset_files = {
+        "caracteristics": os.path.join(DATA_DIR, "caracteristics.csv"),
+        "places":         os.path.join(DATA_DIR, "places.csv"),
+        "vehicles":       os.path.join(DATA_DIR, "vehicles.csv"),
+        "users":          os.path.join(DATA_DIR, "users.csv"),
+    }
+    for label, filepath in dataset_files.items():
+        if not os.path.exists(filepath):
+            radd(f"  [WARN] Dataset absent pour DVC : {filepath}")
+            dvc_hashes[f"data_{label}"] = "unavailable"
+            continue
+        try:
+            subprocess.run(["dvc", "add", filepath], check=True, capture_output=True)
+            dvc_file = filepath + ".dvc"
+            with open(dvc_file, "r") as f:
+                dvc_meta = yaml.safe_load(f)
+            dvc_hashes[f"data_{label}"] = dvc_meta["outs"][0]["md5"]
+            radd(f"  DVC [data_{label}] hash : {dvc_hashes[f'data_{label}']}")
+        except Exception as e:
+            radd(f"  [WARN] DVC indisponible pour {label} : {e}")
+            dvc_hashes[f"data_{label}"] = "unavailable"
+
+    # DVC push vers le remote
+    try:
+        subprocess.run(["dvc", "push"], check=True, capture_output=True)
+        radd("  DVC push : OK")
+    except Exception as e:
+        radd(f"  [WARN] DVC push echoue : {e}")
+
+    radd("")
+    radd("=" * 70)
+    radd("  TERMINE - Prediction via : python src/models/predict_model.py")
+    radd("=" * 70)
+
+    return dvc_hashes
+
+# Pour exporter les données de postgresql en csv (pour stockage DVC)
+def export_datasets_to_csv(df_raw: pd.DataFrame) -> None:
+    """Exporte les tables brutes en CSV pour le tracking DVC."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    conn = psycopg2.connect(**CONN_PARAMS)
+    tables = ["caracteristics", "places", "vehicles", "users"]
+    for table in tables:
+        csv_path = os.path.join(DATA_DIR, f"{table}.csv")
+        if not os.path.exists(csv_path):  # export une seule fois si absent
+            pd.read_sql(f"SELECT * FROM {table};", conn).to_csv(csv_path, index=False)
+            radd(f"  Export CSV : {csv_path}")
+        else:
+            radd(f"  CSV deja present : {csv_path}")
+    conn.close()
 
 # ============================================================================
 #  MAIN
@@ -678,11 +756,12 @@ def train_model():
     """Point d'entree principal - compatible avec api.py."""
     radd("")
     radd("=" * 70)
-    radd("  TRAIN_MODEL.PY - XGBoost binaire focus Tues")
+    radd("  TRAINING_V2.PY - XGBoost binaire focus Tues")
     radd("=" * 70)
 
     # Phase 1
     df = phase1_load()
+    export_datasets_to_csv(df)
 
     # Phase 2
     df = phase2_clean(df)
@@ -702,11 +781,11 @@ def train_model():
     # Phase 7
     phase7_plots(model, X_test, y_test, y_proba, best_threshold, feature_cols)
 
-    # Phase 9 (sauvegarde avant MLflow pour pouvoir log les artefacts)
-    phase9_save(model, best_threshold, feature_cols)
+    #Phase 9 (sauvegarde avant MLflow pour pouvoir log les artefacts)
+    dvc_hashes = phase9_save(model, best_threshold, feature_cols)
 
     # Phase 8
-    phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_tue_opt, X_train, X_test)
+    phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_tue_opt, X_train, X_test, dvc_hashes) 
 
     return {
         "status": "training completed",
