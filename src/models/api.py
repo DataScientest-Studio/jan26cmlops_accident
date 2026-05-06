@@ -1,13 +1,12 @@
 from fastapi import FastAPI, HTTPException
-from training_v2 import train_model
-from predict_v2 import predict_model
+from src.models.training_v2 import train_model
+from src.models.predict_v2 import predict_model
 
 api = FastAPI(
-    title="API - Prédiction de la sévérité d'un accidents",
+    title="API - Prédiction de la sévérité d'un accident",
     description="API MLOps - Prediction d'accident",
     version="1.0"
 )
-
 
 @api.post("/training/")
 def training_endpoint():
@@ -16,7 +15,6 @@ def training_endpoint():
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @api.post("/predict/")
 def predict_endpoint():
