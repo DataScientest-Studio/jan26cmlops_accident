@@ -1,15 +1,19 @@
+import os
 import psycopg2
 from psycopg2.extras import execute_values
 import pandas as pd
-import os
+from dotenv import load_dotenv
 
-#  Paramètres de connexion PostgreSQL
+# Charger les variables d'environnement depuis .env (racine du projet)
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), ".env"))
+
+# Paramètres de connexion PostgreSQL (lus depuis .env, valeurs par défaut si absent)
 DB_PARAMS = {
-    "dbname": "mlops_accidents",
-    "user": "postgres",
-    "password": "admin",  
-    "host": "localhost",
-    "port": 5432
+    "dbname": os.getenv("POSTGRES_DB", "mlops_accidents"),
+    "user": os.getenv("POSTGRES_USER", "postgres"),
+    "password": os.getenv("POSTGRES_PASSWORD", "admin"),
+    "host": os.getenv("POSTGRES_HOST", "localhost"),
+    "port": int(os.getenv("POSTGRES_PORT", "5432")),
 }
 
 # Chemin des CSV

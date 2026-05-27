@@ -1,4 +1,4 @@
 [core]
-    remote = myremote
-['remote "myremote"']
-    url = C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\dvc-storage
+    remote = local-storage
+['remote "local-storage"']
+    url = dvc-storage

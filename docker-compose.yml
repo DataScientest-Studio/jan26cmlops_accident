@@ -12,14 +12,15 @@ services:
     image: postgres:15
     container_name: accident-db
     environment:
-      POSTGRES_DB: mlops_accidents
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: ${POSTGRES_DB:-mlops_accidents}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Variable POSTGRES_PASSWORD requise dans .env}
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./src/data/database/create_table.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./src/data/database/init_mlflow_db.sql:/docker-entrypoint-initdb.d/00_init_mlflow_db.sql
+      - ./src/data/database/create_table.sql:/docker-entrypoint-initdb.d/01_create_tables.sql
     networks:
       - mlops-net
     healthcheck:
@@ -31,7 +32,17 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.13.0
     container_name: accident-mlflow
-    command: bash -c "pip install psycopg2-binary --quiet && mlflow server --host 0.0.0.0 --port 8080 --backend-store-uri postgresql://postgres:admin@db:5432/mlflow_tracking --default-artifact-root /mlflow/artifacts --serve-artifacts"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Variable POSTGRES_PASSWORD requise dans .env}
+    command: >
+      bash -c "pip install psycopg2-binary --quiet &&
+      mlflow server
+      --host 0.0.0.0
+      --port 8080
+      --backend-store-uri postgresql://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@db:5432/mlflow_tracking
+      --default-artifact-root /mlflow/artifacts
+      --serve-artifacts"
     ports:
       - "8080:8080"
     volumes:
@@ -56,6 +67,7 @@ services:
         condition: service_healthy
     volumes:
       - ./src:/app/src
+      - ./models:/app/models
     networks:
       - mlops-net
     restart: on-failure
