@@ -10,20 +10,24 @@ versions qui renvoient un resultat fixe. Ca permet de tester la logique
 de l'API sans infrastructure (pas de PostgreSQL, pas de modele .pkl).
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-
-# ============================================================================
-# On doit creer une fausse version des imports AVANT d'importer api.py
-# Sinon Python essaie d'importer training_v2 (qui a besoin de psycopg2, etc.)
-# ============================================================================
-
-# Creer de faux modules training_v2 et predict_v2
 import sys
+import os
+from unittest.mock import MagicMock
+
+# ============================================================================
+# Ajouter la racine du projet au PYTHONPATH
+# pour que "from src.models.api import api" fonctionne
+# ============================================================================
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+# ============================================================================
+# Mocker training_v2 et predict_v2 AVANT que api.py les importe
+# On cree de faux modules qui renvoient des resultats fixes
+# ============================================================================
 mock_training = MagicMock()
 mock_predict = MagicMock()
 
-# Definir ce que les fausses fonctions renvoient
 mock_training.train_model.return_value = {
     "status": "training completed",
     "accuracy": 0.81,
@@ -36,13 +40,13 @@ mock_predict.predict_model.return_value = {
     "n_reste": 60,
 }
 
-# Injecter les faux modules dans Python AVANT l'import de api
-sys.modules["training_v2"] = mock_training
-sys.modules["predict_v2"] = mock_predict
+# Injecter les faux modules AVANT l'import de api.py
+sys.modules["src.models.training_v2"] = mock_training
+sys.modules["src.models.predict_v2"] = mock_predict
 
 # Maintenant on peut importer api.py sans erreur
-from api import api  # noqa: E402
-from fastapi.testclient import TestClient
+from src.models.api import api  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 # Client de test FastAPI
 client = TestClient(api)
