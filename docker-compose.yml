@@ -29,6 +29,25 @@ services:
       timeout: 5s
       retries: 5
 
+
+  db-init:                            
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: accident-db-init
+    command: python src/data/database/fill_database.py
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+      - ./data_kaggle:/app/data_kaggle  
+    networks:
+      - mlops-net
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"            
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.13.0
     container_name: accident-mlflow
@@ -65,9 +84,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      db-init:                          
+        condition: service_completed_successfully
     volumes:
       - ./src:/app/src
       - ./models:/app/models
+      - ./data_kaggle:/app/data_kaggle
+      - ./reports:/app/reports                     
+      - ./dvc-storage:/app/dvc-storage
+      - ./reports:/app/reports 
     networks:
       - mlops-net
     restart: on-failure

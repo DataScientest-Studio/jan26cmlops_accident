@@ -12,6 +12,9 @@ RUN pip install --no-cache-dir -r requirements.docker.txt
 
 COPY src/ ./src/
 
+RUN dvc init --no-scm && \
+    dvc remote add -d myremote /app/dvc-storage 
+
 EXPOSE 8000
 
 CMD ["python", "-m", "uvicorn", "src.models.api:api", "--host", "0.0.0.0", "--port", "8000"]

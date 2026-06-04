@@ -1,5 +1,5 @@
 outs:
-- md5: c2b3d2bd45848fa2793f89a627218141
-  size: 71030227
+- md5: af05e132672e90f4a90d78faf5cdd223
+  size: 91
   hash: md5
   path: places.csv

@@ -41,7 +41,9 @@ load_dotenv(os.path.join(
 # ============================================================================
 #  CONFIGURATION
 # ============================================================================
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+REPO_ROOT = os.getenv("REPO_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 MODELS_DIR = os.path.join(REPO_ROOT, "models")
 REPORTS_DIR = os.path.join(REPO_ROOT, "reports")
 
@@ -49,7 +51,7 @@ CONN_PARAMS = {
     "dbname": os.getenv("POSTGRES_DB", "mlops_accidents"),
     "user": os.getenv("POSTGRES_USER", "postgres"),
     "password": os.getenv("POSTGRES_PASSWORD", "admin"),
-    "host": os.getenv("POSTGRES_HOST", "localhost"),
+    "host": os.getenv("POSTGRES_HOST", "db"),
     "port": int(os.getenv("POSTGRES_PORT", "5432")),
 }
 

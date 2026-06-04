@@ -759,6 +759,31 @@ def train_model():
     radd("  TRAINING_V2.PY - XGBoost binaire focus Tues")
     radd("=" * 70)
 
+    # Reset du rapport entre les appels API
+    global report_lines
+    report_lines = []
+
+    # Debug chemins
+    radd(f"  [DEBUG] REPO_ROOT  : {REPO_ROOT}")
+    radd(f"  [DEBUG] DATA_DIR   : {DATA_DIR}")
+    radd(f"  [DEBUG] MODELS_DIR : {MODELS_DIR}")
+    radd(f"  [DEBUG] CWD        : {os.getcwd()}")
+
+    # Debug connexion BDD
+    try:
+        conn = psycopg2.connect(**CONN_PARAMS)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users;")
+        radd(f"  [DEBUG] users count : {cur.fetchone()[0]}")
+        cur.execute("SELECT COUNT(*) FROM caracteristics;")
+        radd(f"  [DEBUG] carac count : {cur.fetchone()[0]}")
+        conn.close()
+    except Exception as e:
+        radd(f"  [DEBUG] Erreur BDD : {e}")
+
+    radd("")
+    radd("=" * 70)
+    
     # Phase 1
     df = phase1_load()
     export_datasets_to_csv(df)
