@@ -31,6 +31,8 @@ import joblib
 from dotenv import load_dotenv
 from evidently import Report
 from evidently.presets import DataDriftPreset, ClassificationPreset
+from evidently.core.datasets import DataDefinition, BinaryClassification
+from evidently.future.datasets import Dataset
 
 # Charger .env
 load_dotenv(os.path.join(
@@ -93,7 +95,9 @@ def load_reference_data():
 def load_current_data():
     """
     Charge les données actuelles depuis PostgreSQL.
-    Applique la même jointure que training_v2.py phase 1.
+    Applique la même jointure et le même preprocessing minimal
+    que training_v2.py (phases 1 et 2) pour que les colonnes
+    correspondent aux données de référence.
     """
     conn = psycopg2.connect(**CONN_PARAMS)
 
@@ -115,7 +119,48 @@ def load_current_data():
         .merge(carac, on="num_acc", how="left")
         .merge(places, on="num_acc", how="left")
     )
-    print(f"  Current chargée : {len(df):,} lignes depuis PostgreSQL")
+
+    # --- Preprocessing minimal (même logique que training_v2.py phase 2) ---
+
+    # Cible binaire : 0=indemne (grav=1), 1=reste (grav=2,3,4)
+    if "grav" in df.columns:
+        df["grav"] = pd.to_numeric(df["grav"], errors="coerce")
+        df = df.dropna(subset=["grav"])
+        df["grav"] = df["grav"].astype(int)
+        df["grav_bin"] = (df["grav"] != 1).astype(int)
+
+    # Age
+    if "an_nais" in df.columns and "an" in df.columns:
+        df["an_nais"] = pd.to_numeric(df["an_nais"], errors="coerce")
+        df["an"] = pd.to_numeric(df["an"], errors="coerce")
+        df["age"] = df["an"] - df["an_nais"]
+        df.loc[df["age"] < 0, "age"] = pd.NA
+        df.loc[df["age"] > 120, "age"] = pd.NA
+
+    # Heure
+    if "hrmn" in df.columns:
+        df["hrmn"] = df["hrmn"].astype(str).str.replace(":", "").str.zfill(4)
+        df["heure"] = pd.to_numeric(df["hrmn"].str[:2], errors="coerce")
+
+    # is_weekend
+    if "an" in df.columns and "mois" in df.columns and "jour" in df.columns:
+        date_tmp = pd.to_datetime(
+            df["an"].astype(str) + "-" + df["mois"].astype(str).str.zfill(2)
+            + "-" + df["jour"].astype(str).str.zfill(2),
+            errors="coerce",
+        )
+        df["is_weekend"] = date_tmp.dt.dayofweek.isin([5, 6]).astype(int)
+
+    # Encodage des colonnes texte en numérique (comme training_v2.py)
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        if df[col].isna().sum() > 0:
+            df[col] = df[col].fillna(-1)
+        df[col] = df[col].astype(int)
+
+    df = df.fillna(-1)
+
+    print(f"  Current chargée : {len(df):,} lignes depuis PostgreSQL (avec preprocessing)")
     return df
 
 
@@ -164,14 +209,16 @@ def generate_performance_report(reference, current):
         print("  Rapport de performance ignoré.")
         return None
 
-    if not os.path.exists(FEATURES_FILE):
-        print(f"  Liste de features introuvable : {FEATURES_FILE}")
-        print("  Rapport de performance ignoré.")
-        return None
-
-    # Charger le modèle et les features
+    # Charger le modèle
     model = joblib.load(MODEL_FILE)
-    features = joblib.load(FEATURES_FILE)
+
+    # Charger les features : depuis le fichier si disponible,
+    # sinon les extraire directement du modèle entraîné
+    if os.path.exists(FEATURES_FILE):
+        features = joblib.load(FEATURES_FILE)
+    else:
+        features = model.get_booster().feature_names
+        print(f"  features_list.pkl absent, features extraites du modèle")
 
     # Vérifier que grav_bin existe (nécessaire pour évaluer la performance)
     if "grav_bin" not in reference.columns or "grav_bin" not in current.columns:
@@ -187,10 +234,18 @@ def generate_performance_report(reference, current):
     ref["prediction"] = model.predict(ref[common_feat])
     cur["prediction"] = model.predict(cur[common_feat])
 
+    # Configurer Evidently pour la classification binaire
+    cols = common_feat + ["grav_bin", "prediction"]
+    data_def = DataDefinition(classification=[
+        BinaryClassification(target="grav_bin", prediction_labels="prediction")
+    ])
+    ref_ds = Dataset.from_pandas(ref[cols], data_definition=data_def)
+    cur_ds = Dataset.from_pandas(cur[cols], data_definition=data_def)
+
     report = Report([ClassificationPreset()])
     snapshot = report.run(
-        reference_data=ref[common_feat + ["grav_bin", "prediction"]],
-        current_data=cur[common_feat + ["grav_bin", "prediction"]],
+        reference_data=ref_ds,
+        current_data=cur_ds,
     )
 
     output = os.path.join(REPORTS_DIR, "model_performance.html")
