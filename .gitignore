@@ -9,6 +9,7 @@ __pycache__/
 .Python
 env/
 venv/
+venv311/
 build/
 develop-eggs/
 dist/
@@ -98,3 +99,17 @@ mlartifacts/
 # Checkpoints intermediaires (regenerables)
 src/data/checkpoint_*.parquet
 models/checkpoint_*.pkl
+
+# DVC storage local (ne jamais commiter le cache)
+dvc-storage/
+/tmp/
+
+# Modèles et rapports — gérés par DVC
+models/*.pkl
+reports/*.txt
+reports/figures/*.png
+reports/*.html
+
+# Fichiers DVC (ceux-ci doivent rester dans Git)
+!models/*.dvc
+!reports/*.dvc

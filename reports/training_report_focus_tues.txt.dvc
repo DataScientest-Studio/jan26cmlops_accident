@@ -1,0 +1,5 @@
+outs:
+- md5: 64fe2de35aa7c0cc2c1096e413426338
+  size: 6384
+  hash: md5
+  path: training_report_focus_tues.txt
