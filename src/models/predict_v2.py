@@ -253,7 +253,7 @@ def predict_model():
     # Log MLflow du run de prédiction
     try:
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-        mlflow.set_experiment(MLFLOW_EXPERIMENT if 'MLFLOW_EXPERIMENT' in dir() else "accidentologie-focus-tues")
+        mlflow.set_experiment(os.getenv("MLFLOW_EXPERIMENT", "accidentologie-focus-tues"))
 
         with mlflow.start_run(run_name="prediction") as run:
             mlflow.set_tag("run_type",      "prediction")

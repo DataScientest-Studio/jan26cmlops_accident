@@ -140,6 +140,10 @@ jobs:
 
     - uses: actions/checkout@v4
 
+    - name: Créer un .env pour la validation
+      run: |
+        echo "POSTGRES_PASSWORD=ci_test" > .env
+
     - name: Vérifier la syntaxe docker-compose
       run: |
         docker compose -f docker-compose.yml config --quiet
