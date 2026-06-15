@@ -96,3 +96,17 @@ services:
     networks:
       - mlops-net
     restart: on-failure
+
+  streamlit:
+      build:
+        context: .
+        dockerfile: Dockerfile.streamlit
+      container_name: accident-streamlit
+      ports:
+        - "8501:8501"
+      environment:
+        - API_URL=http://api:8000
+      networks:
+        - mlops-net
+      depends_on:
+        - api

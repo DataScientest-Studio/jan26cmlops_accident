@@ -226,15 +226,15 @@ def predict_model():
     probas      = model.predict_proba(X)[:, 1]
     predictions = (probas >= threshold).astype(int)
 
-    df_out["proba_reste"]       = probas
+    df_out["proba_non_indemne"]       = probas
     df_out["prediction"]        = predictions
-    df_out["prediction_label"]  = df_out["prediction"].map({0: "Indemne", 1: "Reste (tue/hospit/leger)"})
+    df_out["prediction_label"]  = df_out["prediction"].map({0: "Indemne", 1: "tue/hospit/leger"})
 
     n_indemne = (predictions == 0).sum()
-    n_reste   = (predictions == 1).sum()
+    n_non_indemne   = (predictions == 1).sum()
     print(f"\n  Predictions :")
     print(f"    Indemne : {n_indemne:,}")
-    print(f"    Reste   : {n_reste:,}")
+    print(f"    non_indemne   : {n_non_indemne:,}")
 
     # Focus Tues 
     recall_tues = None
@@ -265,8 +265,8 @@ def predict_model():
             mlflow.log_param("n_predictions",  len(predictions))
 
             mlflow.log_metric("n_indemne",     int(n_indemne))
-            mlflow.log_metric("n_reste",       int(n_reste))
-            mlflow.log_metric("ratio_reste",   round(float(n_reste / len(predictions)), 4))
+            mlflow.log_metric("n_non_indemne",       int(n_non_indemne))
+            mlflow.log_metric("ratio_non_indemne",   round(float(n_non_indemne / len(predictions)), 4))
 
             if recall_tues is not None:
                 mlflow.log_metric("recall_tues", round(float(recall_tues), 4))
@@ -278,7 +278,7 @@ def predict_model():
 
     # Affichage sample
     print(f"\n  === SAMPLE PREDICTIONS ===")
-    cols_display = ["num_acc", "num_veh", "prediction_label", "proba_reste"]
+    cols_display = ["num_acc", "num_veh", "prediction_label", "proba_non_indemne"]
     cols_display = [c for c in cols_display if c in df_out.columns]
     print(df_out[cols_display].head(10).to_string(index=False))
 
@@ -287,7 +287,7 @@ def predict_model():
         "model_source":     model_source,
         "n_predictions":    len(predictions),
         "n_indemne":        int(n_indemne),
-        "n_reste":          int(n_reste),
+        "n_non_indemne":          int(n_non_indemne),
         "threshold":        float(threshold),
         "recall_tues":      float(recall_tues) if recall_tues is not None else None,
         "sample_predictions": df_out[cols_display].head(10).to_dict(orient="records"),

@@ -9,7 +9,7 @@ OBJECTIF : Entrainer un XGBoost pour predire si un usager est INDEMNE ou non,
 
 CIBLE BINAIRE :
   grav_bin = 0 : Indemne (grav=1)
-  grav_bin = 1 : Reste   (grav=2 Tue + grav=3 Hospitalise + grav=4 Blesse leger)
+  grav_bin = 1 : Non indemne   (grav=2 Tue + grav=3 Hospitalise + grav=4 Blesse leger)
 
 AMELIORATIONS vs training.py de Seb :
   - Conservation des -1 (non renseigne) comme categorie valide
@@ -293,11 +293,11 @@ def phase2_clean(df):
     df["grav"] = pd.to_numeric(df["grav"], errors="coerce")
     df = df.dropna(subset=["grav"])
     df["grav"] = df["grav"].astype(int)
-    df["grav_bin"] = (df["grav"] != 1).astype(int)  # 0=indemne, 1=reste
+    df["grav_bin"] = (df["grav"] != 1).astype(int)  # 0=indemne, 1=Non indemne
 
     radd(f"  Cible binaire :")
     radd(f"    grav_bin=0 (Indemne) : {(df['grav_bin'] == 0).sum():>10,}")
-    radd(f"    grav_bin=1 (Reste)   : {(df['grav_bin'] == 1).sum():>10,}")
+    radd(f"    grav_bin=1 (Non indemne)   : {(df['grav_bin'] == 1).sum():>10,}")
     radd(f"      dont Tues (grav=2) : {(df['grav'] == 2).sum():>10,}")
     radd(f"      dont Hospit (grav=3): {(df['grav'] == 3).sum():>10,}")
     radd(f"      dont Legers (grav=4): {(df['grav'] == 4).sum():>10,}")
@@ -430,7 +430,7 @@ def phase5_eval(model, X_test, y_test, grav_test):
     radd(f"  AUC-ROC   : {auc:.4f}")
 
     radd(f"\n  --- Classification Report ---")
-    radd(classification_report(y_test, y_pred, target_names=["Indemne", "Reste"]))
+    radd(classification_report(y_test, y_pred, target_names=["Indemne", "Non indemne"]))
 
     # Focus Tues
     mask_tue = grav_test == 2
@@ -499,7 +499,7 @@ def phase6_threshold(model, X_test, y_test, grav_test, y_proba):
     radd(f"  Recall Tues   : {rec_tue_opt:.4f}")
 
     radd(f"\n  --- Classification Report (seuil={best_threshold}) ---")
-    radd(classification_report(y_test, y_opt, target_names=["Indemne", "Reste"]))
+    radd(classification_report(y_test, y_opt, target_names=["Indemne", "Non indemne"]))
 
     return best_threshold, f1_opt, rec_tue_opt
 
@@ -521,7 +521,7 @@ def phase7_plots(model, X_test, y_test, y_proba, best_threshold, feature_cols):
     ax.plot([0, 1], [0, 1], "k--", alpha=0.4)
     ax.set_xlabel("Taux de faux positifs")
     ax.set_ylabel("Taux de vrais positifs")
-    ax.set_title("Courbe ROC - Focus Tues\nIndemne vs Reste", fontsize=12)
+    ax.set_title("Courbe ROC - Focus Tues\nIndemne vs Non indemne", fontsize=12)
     ax.legend(loc="lower right")
     fig.tight_layout()
     fig.savefig(ROC_PNG, dpi=150)
@@ -562,7 +562,7 @@ def phase7_plots(model, X_test, y_test, y_proba, best_threshold, feature_cols):
     y_opt = (y_proba >= best_threshold).astype(int)
     cm = confusion_matrix(y_test, y_opt)
     fig, ax = plt.subplots(figsize=(7, 6))
-    disp = ConfusionMatrixDisplay(cm, display_labels=["Indemne", "Reste"])
+    disp = ConfusionMatrixDisplay(cm, display_labels=["Indemne", "Non indemne"])
     disp.plot(ax=ax, cmap="Blues", values_format="d")
     ax.set_title(f"Matrice de confusion (seuil={best_threshold})", fontsize=12)
     fig.tight_layout()

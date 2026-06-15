@@ -1,0 +1,676 @@
+# -*- coding: utf-8 -*-
+"""
+=============================================================================
+  streamlit_app.py - Présentation du projet MLOps Accidentologie
+=============================================================================
+
+Interface Streamlit interagissant avec l'API FastAPI pour présenter
+le projet de bout en bout : contexte, architecture, ML, MLflow,
+orchestration, CI/CD, monitoring et démo live.
+
+Usage :
+  streamlit run streamlit_app.py
+
+Variable d'environnement :
+  API_URL  -> URL de l'API (défaut : http://localhost:8000
+              ou http://api:8000 si lancé dans Docker)
+=============================================================================
+"""
+
+import os
+import requests
+import pandas as pd
+import streamlit as st
+
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+
+st.set_page_config(
+    page_title="MLOps Accidentologie - Présentation",
+    page_icon="🚗",
+    layout="wide",
+)
+
+
+# ============================================================================
+#  HELPERS API
+# ============================================================================
+def api_get(path: str, timeout: int = 15):
+    try:
+        r = requests.get(f"{API_URL}{path}", timeout=timeout)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        st.error(f"Erreur API GET {path} : {e}")
+        return None
+
+
+def api_get_bytes(path: str, timeout: int = 30):
+    try:
+        r = requests.get(f"{API_URL}{path}", timeout=timeout)
+        r.raise_for_status()
+        return r.content
+    except Exception as e:
+        st.warning(f"Ressource indisponible ({path}) : {e}")
+        return None
+
+
+def api_post(path: str, timeout: int = 900):
+    try:
+        r = requests.post(f"{API_URL}{path}", timeout=timeout)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        st.error(f"Erreur API POST {path} : {e}")
+        return None
+
+
+def api_status() -> bool:
+    health = api_get("/health", timeout=5)
+    return health is not None and health.get("status") == "ok"
+
+
+# ============================================================================
+#  PAGE : INTRODUCTION
+# ============================================================================
+def page_intro():
+    st.title("🚗 Prédiction de la gravité des accidents de la route")
+
+    st.markdown("""
+    ## Contexte
+
+    Chaque année, les forces de l'ordre françaises enregistrent des dizaines de milliers
+    d'accidents corporels via la base de données **BAAC** (Bulletin d'Analyse des Accidents
+    Corporels). Ce dataset, disponible sur data.gouv.fr, couvre plusieurs années et détaille
+    pour chaque accident : les usagers impliqués, les véhicules, les caractéristiques de
+    l'accident (lieu, météo, luminosité...) et les lieux (type de route, infrastructure...).
+
+    ## Objectif du projet
+
+    Construire une chaîne **MLOps de bout en bout** capable de :
+    - prédire la **gravité d'un accident** pour un usager donné,
+    - avec un focus particulier sur la **détection des accidents mortels** (variable
+      la plus critique mais aussi la plus rare),
+    - tout en respectant les bonnes pratiques MLOps : reproductibilité, suivi
+      d'expériences, versionning, déploiement automatisé et monitoring continu.
+
+    ## Cible du modèle
+
+    Le problème est reformulé en **classification binaire** :
+    - `grav_bin = 0` → **Indemne**
+    - `grav_bin = 1` → **Blessés/tués** (Tué, Hospitalisé ou Blessé léger)
+
+    Ce choix permet d'appliquer des poids d'échantillonnage spécifiques pour maximiser
+    le **recall sur les accidents mortels**, quitte à accepter quelques faux positifs.
+
+    ## Roadmap du projet
+    """)
+
+    roadmap = pd.DataFrame({
+        "Phase": [
+            "1 - Fondations",
+            "2 - Microservices, Suivi & Versionning",
+            "3 - Orchestration & Déploiement",
+            "4 - Monitoring & Maintenance",
+            "5 - Frontend",
+        ],
+        "Deadline": ["1 Mars", "3 Avril", "2 Mai", "1 Juin", "20 Juin"],
+        "Contenu": [
+            "Base PostgreSQL, scripts training/predict, API FastAPI",
+            "MLflow tracking + registry, comparaison de modèles",
+            "Docker Compose, DVC, CI/CD GitHub Actions, sécurité API",
+            "Evidently (drift), Prometheus/Grafana",
+            "Application Streamlit + documentation",
+        ],
+    })
+    st.table(roadmap)
+
+    st.markdown("---")
+    if api_status():
+        st.success(f"✅ API connectée sur {API_URL}")
+    else:
+        st.error(f"❌ API non accessible sur {API_URL}")
+
+
+# ============================================================================
+#  PAGE : FONDATIONS
+# ============================================================================
+def page_fondations():
+    st.title("🏗️ Fondations")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Base de données PostgreSQL")
+        st.markdown("""
+        Les données BAAC sont chargées dans **4 tables relationnelles** :
+
+        | Table | Contenu |
+        |---|---|
+        | `caracteristics` | Date, heure, conditions météo, lumière... |
+        | `places` | Type de route, profil, infrastructure... |
+        | `vehicles` | Catégorie de véhicule, manœuvre, choc... |
+        | `users` | Usager : place, gravité (cible), âge, sexe... |
+
+        Une table `holidays` complète le dataset avec les jours fériés français,
+        utilisée pour le feature engineering (`is_holiday`).
+
+        Le chargement est automatisé via un script `fill_database.py`, exécuté
+        une seule fois au démarrage du `docker-compose` (service `db-init`).
+        """)
+
+    with col2:
+        st.subheader("API FastAPI")
+        st.markdown("""
+        L'API expose les endpoints suivants :
+
+        | Endpoint | Méthode | Rôle |
+        |---|---|---|
+        | `/training/` | POST | Lance le pipeline d'entraînement complet |
+        | `/predict/` | POST | Lance les prédictions sur les données courantes |
+        | `/monitoring/` | POST | Lance le monitoring Evidently (drift) |
+        | `/health` | GET | Vérification de l'état de l'API |
+        | `/data/stats` | GET | Statistiques du dataset |
+        | `/mlflow/runs` | GET | Historique des runs MLflow |
+        | `/mlflow/model` | GET | Modèle actuellement en Production |
+        | `/reports/*` | GET | Rapports et figures générés |
+        """)
+
+    st.markdown("---")
+    st.subheader("Aperçu des données")
+
+    stats = api_get("/data/stats")
+    if stats:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Caractéristiques", f"{stats['table_counts']['caracteristics']:,}")
+        c2.metric("Lieux",            f"{stats['table_counts']['places']:,}")
+        c3.metric("Véhicules",        f"{stats['table_counts']['vehicles']:,}")
+        c4.metric("Usagers",          f"{stats['table_counts']['users']:,}")
+
+
+# ============================================================================
+#  PAGE : SCRIPTS ML
+# ============================================================================
+def page_scripts_ml():
+    st.title("🧠 Scripts ML - Training & Predict")
+
+    st.markdown("""
+    Le script `training_v2.py` est découpé en **9 phases** indépendantes,
+    exécutées séquentiellement et tracées dans un rapport texte.
+    """)
+
+    with st.expander("📋 Détail des 9 phases du pipeline d'entraînement", expanded=False):
+        st.markdown("""
+        1. **Chargement** PostgreSQL + jointure avec `holidays`
+        2. **Nettoyage** : valeurs `-1` conservées, GPS à 0 → NaN, feature
+           engineering (`age`, `heure`, `is_weekend`, `is_holiday`), cible binaire
+        3. **Sélection de features** par V de Cramer (corrélation avec la cible)
+        4. **Entraînement XGBoost** avec sample weights focus "Tués" (×8)
+        5. **Évaluation globale** (accuracy, F1, AUC) + focus Tués (recall)
+        6. **Optimisation du seuil** de décision (recall Tués ≥ 75%)
+        7. **Visualisations** : ROC, Precision-Recall, Feature Importance, Confusion Matrix
+        8. **MLflow** : tracking, comparaison avec la version Production, promotion
+        9. **Sauvegarde finale** : modèle, seuil, rapport + versionning DVC
+        """)
+
+    st.markdown("---")
+    st.subheader("📊 Statistiques du dataset")
+
+    stats = api_get("/data/stats")
+    if stats:
+        c1, c2 = st.columns([1, 1])
+
+        with c1:
+            st.markdown("**Distribution de la gravité (variable cible)**")
+            grav_labels = stats["grav_labels"]
+            grav_df = pd.DataFrame({
+                "Gravité": [grav_labels.get(k, k) for k in stats["grav_distribution"]],
+                "Nombre":  list(stats["grav_distribution"].values()),
+            })
+            st.bar_chart(grav_df.set_index("Gravité"))
+
+        with c2:
+            st.markdown("**Nombre d'accidents par année**")
+            year_df = pd.DataFrame({
+                "Année": list(stats["accidents_per_year"].keys()),
+                "Accidents": list(stats["accidents_per_year"].values()),
+            })
+            st.bar_chart(year_df.set_index("Année"))
+
+    st.markdown("---")
+    st.subheader("🎯 Choix du modèle : XGBoost binaire focus Tués")
+
+    st.markdown("""
+    **Pourquoi XGBoost ?**
+    - Performant sur données tabulaires hétérogènes (catégorielles + numériques)
+    - Gère nativement les valeurs manquantes
+    - Rapide à entraîner même sur ~1,8M de lignes
+
+    **Pourquoi binaire (Indemne vs blessé/tué) plutôt que multi-classes ?**
+    - La classe "Tué" représente moins de 2% des observations
+    - Un modèle multi-classes a tendance à ignorer cette classe rare
+    - La reformulation binaire + sample weights (`Tué ×8`, `Hospitalisé ×2`,
+      `Blessé léger ×1.5`) force le modèle à apprendre les signaux des cas graves
+
+    **Optimisation du seuil de décision**
+
+    Plutôt que le seuil par défaut de 0.5, le script teste tous les seuils entre
+    0.10 et 0.90 et retient celui qui maximise le F1-macro **sous contrainte**
+    `recall_Tués ≥ 75%` et `precision_globale ≥ 55%`.
+    """)
+
+    st.markdown("---")
+    st.subheader("📈 Visualisations du dernier entraînement")
+
+    figs = {
+        "Courbe ROC":            "roc_curve_focus_tues.png",
+        "Precision-Recall":      "pr_curve_focus_tues.png",
+        "Feature Importance":    "feature_importance_focus_tues.png",
+        "Matrice de confusion":  "confusion_matrix_focus_tues.png",
+    }
+
+    cols = st.columns(2)
+    for i, (label, filename) in enumerate(figs.items()):
+        img = api_get_bytes(f"/reports/figures/{filename}")
+        with cols[i % 2]:
+            st.markdown(f"**{label}**")
+            if img:
+                st.image(img, use_column_width=True)
+            else:
+                st.info("Pas encore généré — lancez un entraînement.")
+
+    st.markdown("---")
+    st.subheader("🔮 Prédiction")
+    st.markdown("""
+    Le script `predict_v2.py` :
+    1. Charge le modèle en **Production** depuis le MLflow Registry
+       (fallback sur le fichier local si MLflow indisponible)
+    2. Récupère le **seuil optimal** loggué lors de l'entraînement
+    3. Applique le **même preprocessing** que l'entraînement
+    4. Prédit sur les données courantes et calcule le recall sur les "Tués"
+    """)
+
+    if st.button("▶️ Lancer une prédiction", key="predict_ml_page"):
+        with st.spinner("Prédiction en cours..."):
+            result = api_post("/predict/")
+        if result:
+            st.success("Prédiction terminée")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Indemnes prédits", f"{result.get('n_indemne', 0):,}")
+            c2.metric("Bléssés/tués prédits",    f"{result.get('n_non_indemne', 0):,}")
+            c3.metric("Seuil utilisé",    f"{result.get('threshold', 0):.2f}")
+            if result.get("recall_tues") is not None:
+                st.metric("Recall Tués", f"{result['recall_tues']:.2%}")
+
+
+# ============================================================================
+#  PAGE : SUIVI MLFLOW
+# ============================================================================
+def page_mlflow():
+    st.title("📡 Suivi d'expériences avec MLflow")
+
+    st.markdown("""
+    Chaque entraînement crée un **run MLflow** qui trace :
+    - les **hyperparamètres** XGBoost et le seuil optimal
+    - les **métriques** (accuracy, F1, AUC, recall Tués...)
+    - le **modèle** XGBoost comme artefact
+    - les **figures** (ROC, PR, Feature Importance, Confusion Matrix)
+    - les **hash DVC** des datasets et fichiers utilisés
+
+    Le **Model Registry** gère le cycle de vie des versions : `Staging`,
+    `Production`, `Archived`. À chaque entraînement, le nouveau modèle est
+    comparé au modèle en Production sur le F1-macro optimal — le meilleur
+    est promu automatiquement.
+    """)
+
+    st.markdown("---")
+    st.subheader("🏆 Modèle actuellement en Production")
+
+    model_info = api_get("/mlflow/model")
+    if model_info and model_info.get("status") != "no production model":
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Version",      model_info["version"])
+        c2.metric("F1 macro opt", f"{model_info['metrics'].get('f1_macro_opt', 0):.4f}")
+        c3.metric("Recall Tués",  f"{model_info['metrics'].get('recall_tues_opt', 0):.2%}")
+        c4.metric("Seuil",        f"{model_info['metrics'].get('threshold', 0):.2f}")
+
+        with st.expander("Tous les paramètres et métriques"):
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                st.markdown("**Paramètres**")
+                st.json(model_info["params"])
+            with cc2:
+                st.markdown("**Métriques**")
+                st.json(model_info["metrics"])
+    else:
+        st.info("Aucun modèle en Production pour le moment.")
+
+    st.markdown("---")
+    st.subheader("📜 Historique des runs")
+
+    runs_data = api_get("/mlflow/runs")
+    if runs_data and runs_data.get("runs"):
+        runs = runs_data["runs"]
+
+        rows = []
+        for r in runs:
+            rows.append({
+                "Run ID":     r["run_id"][:8],
+                "Type":       r["run_type"],
+                "Statut":     r["status"],
+                "F1 macro":   r["metrics"].get("f1_macro_opt", r["metrics"].get("f1_macro")),
+                "Recall Tués": r["metrics"].get("recall_tues_opt", r["metrics"].get("recall_tues_0.5")),
+                "Drift share": r["metrics"].get("drift_share"),
+                "Date":       pd.to_datetime(r["start_time"], unit="ms"),
+            })
+        df = pd.DataFrame(rows).sort_values("Date")
+
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        training_df = df[df["Type"] == "training"].dropna(subset=["F1 macro"])
+        if len(training_df) > 1:
+            st.markdown("**Évolution du F1-macro au fil des entraînements**")
+            st.line_chart(training_df.set_index("Date")[["F1 macro", "Recall Tués"]])
+    else:
+        st.info("Aucun run trouvé — lancez un entraînement depuis l'onglet Démo.")
+
+    st.markdown("---")
+    st.caption(f"Interface MLflow complète : {os.getenv('MLFLOW_UI_URL', 'http://localhost:8080')}")
+
+
+# ============================================================================
+#  PAGE : ORCHESTRATION
+# ============================================================================
+def page_orchestration():
+    st.title("🐳 Orchestration & Versionning")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Docker Compose")
+        st.markdown("""
+        L'ensemble du projet est orchestré via `docker-compose` avec
+        **5 services** :
+
+        | Service | Rôle |
+        |---|---|
+        | `db` | PostgreSQL — stockage des données et du backend MLflow |
+        | `db-init` | Chargement initial des CSV BAAC (exécuté une fois) |
+        | `mlflow` | Serveur MLflow (tracking + registry + artefacts) |
+        | `api` | API FastAPI (training, predict, monitoring) |
+        | `streamlit` | Cette application de présentation |
+
+        Les services communiquent via un réseau Docker dédié (`mlops-net`),
+        avec des `healthcheck` et `depends_on` pour garantir l'ordre de
+        démarrage (la base doit être prête avant MLflow et l'API).
+        """)
+
+    with col2:
+        st.subheader("Versionning avec DVC")
+        st.markdown("""
+        **DVC (sans Git)** versionne :
+        - les **datasets** exportés depuis PostgreSQL (`caracteristics.csv`,
+          `places.csv`, `vehicles.csv`, `users.csv`)
+        - le **modèle** entraîné (`model_focus_tues.pkl`)
+        - le **seuil** optimal et le **rapport** de training
+
+        À chaque entraînement, les **hash MD5** générés par DVC sont
+        loggués comme paramètres MLflow (`dvc_hash_model`,
+        `dvc_hash_data_users`...) — ce qui permet de relier précisément
+        une version de modèle à une version exacte des données.
+
+        Un **remote DVC partagé** (volume Docker `dvc-storage`) permet de
+        synchroniser les fichiers entre la machine hôte et les conteneurs.
+        """)
+
+    st.markdown("---")
+    st.subheader("Architecture globale")
+
+
+
+# ============================================================================
+#  PAGE : DÉPLOIEMENT CI/CD
+# ============================================================================
+def page_cicd():
+    st.title("🚀 Déploiement & CI/CD")
+
+
+
+
+
+
+# ============================================================================
+#  PAGE : MONITORING
+# ============================================================================
+def page_monitoring():
+    st.title("🔍 Monitoring avec Evidently")
+
+    st.markdown("""
+    Le monitoring compare deux périodes du dataset :
+    - **Référence** : données historiques (années anciennes)
+    - **Courant** : données récentes (dernière année du dataset = 2016)
+
+    Deux rapports sont générés :
+    1. **Data Drift** — la distribution des features a-t-elle changé ?
+    2. **Performance du modèle** — le modèle se dégrade-t-il sur les données récentes ?
+
+    Si le **taux de colonnes driftées dépasse un seuil** (30% par défaut), un
+    **réentraînement est déclenché automatiquement** et le tout est tracé
+    dans MLflow (run taggé `run_type=monitoring`).
+    """)
+
+    st.markdown("---")
+
+    if st.button("▶️ Lancer le monitoring", key="monitoring_page"):
+        with st.spinner("Analyse du drift en cours (peut prendre 1-2 min)..."):
+            result = api_post("/monitoring/")
+        if result:
+            st.success("Monitoring terminé")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Drift share", f"{result.get('drift_share', 0):.1%}")
+            c2.metric("Seuil",       f"{result.get('drift_threshold', 0):.1%}")
+            c3.metric(
+                "Retraining déclenché",
+                "Oui ✅" if result.get("retrain_triggered") else "Non",
+            )
+            st.session_state["last_monitoring_result"] = result
+
+    st.markdown("---")
+    st.subheader("📄 Rapport Data Drift")
+
+    drift_html = api_get_bytes("/reports/html/data_drift.html")
+    if drift_html:
+        st.components.v1.html(drift_html.decode("utf-8"), height=800, scrolling=True)
+    else:
+        st.info("Aucun rapport de drift disponible — lancez le monitoring ci-dessus.")
+
+    with st.expander("📄 Rapport de performance du modèle"):
+        perf_html = api_get_bytes("/reports/html/model_performance.html")
+        if perf_html:
+            st.components.v1.html(perf_html.decode("utf-8"), height=800, scrolling=True)
+        else:
+            st.info("Rapport de performance non disponible.")
+
+
+# ============================================================================
+#  PAGE : DÉMO
+# ============================================================================
+def page_demo():
+    st.title("🎬 Démo en direct")
+
+    st.markdown("""
+    Cette page permet d'exécuter le pipeline complet **en direct** devant le jury :
+    1. **Entraînement** — relance le pipeline et affiche les nouvelles métriques
+    2. **Prédiction** — applique le modèle en Production sur les données courantes
+    3. **Monitoring** — vérifie le drift et déclenche un réentraînement si besoin
+    """)
+
+    tab1, tab2, tab3 = st.tabs(["1️⃣ Training", "2️⃣ Predict", "3️⃣ Monitoring"])
+
+    # ── Training ────────────────────────────────────────────────────────────
+    with tab1:
+        st.markdown("Relance le pipeline complet (phases 1 à 9). Peut prendre plusieurs minutes.")
+        if st.button("▶️ Lancer l'entraînement", key="demo_train"):
+            with st.spinner("Entraînement en cours..."):
+                result = api_post("/training/", timeout=1800)
+            if result:
+                st.success("Entraînement terminé")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Accuracy",     f"{result.get('accuracy', 0):.4f}")
+                c2.metric("F1 macro",     f"{result.get('f1_macro', 0):.4f}")
+                c3.metric("AUC-ROC",      f"{result.get('auc_roc', 0):.4f}")
+                c4.metric("Recall Tués",  f"{result.get('recall_tues_opt', 0):.2%}")
+                st.json(result)
+
+        st.markdown("**Figures générées lors du dernier entraînement**")
+        cols = st.columns(4)
+        figs = {
+            "ROC":        "roc_curve_focus_tues.png",
+            "PR":         "pr_curve_focus_tues.png",
+            "Features":   "feature_importance_focus_tues.png",
+            "Confusion":  "confusion_matrix_focus_tues.png",
+        }
+        for i, (label, filename) in enumerate(figs.items()):
+            img = api_get_bytes(f"/reports/figures/{filename}")
+            with cols[i]:
+                if img:
+                    st.image(img, caption=label, use_column_width=True)
+
+    # ── Predict ─────────────────────────────────────────────────────────────
+    with tab2:
+        st.markdown("Charge le modèle en Production et prédit sur les données courantes.")
+        if st.button("▶️ Lancer la prédiction", key="demo_predict"):
+            with st.spinner("Prédiction en cours..."):
+                result = api_post("/predict/")
+            if result:
+                st.success("Prédiction terminée")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Source du modèle", result.get("model_source", "?"))
+                c2.metric("Indemnes prédits",  f"{result.get('n_indemne', 0):,}")
+                c3.metric("Blessés/tués prédits",     f"{result.get('n_non_indemne', 0):,}")
+                if result.get("recall_tues") is not None:
+                    st.metric("Recall Tués", f"{result['recall_tues']:.2%}")
+
+                st.markdown("**Échantillon de prédictions**")
+                sample = result.get("sample_predictions", [])
+                if sample:
+                    st.dataframe(pd.DataFrame(sample), use_container_width=True, hide_index=True)
+
+    # ── Monitoring ──────────────────────────────────────────────────────────
+    with tab3:
+        st.markdown("Compare les données historiques aux données récentes et détecte le drift.")
+        if st.button("▶️ Lancer le monitoring", key="demo_monitoring"):
+            with st.spinner("Analyse du drift en cours..."):
+                result = api_post("/monitoring/")
+            if result:
+                st.success("Monitoring terminé")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Drift share", f"{result.get('drift_share', 0):.1%}")
+                c2.metric("Seuil",       f"{result.get('drift_threshold', 0):.1%}")
+                c3.metric(
+                    "Retraining",
+                    "Déclenché ✅" if result.get("retrain_triggered") else "Non déclenché",
+                )
+
+        drift_html = api_get_bytes("/reports/html/data_drift.html")
+        if drift_html:
+            st.markdown("**Rapport Data Drift**")
+            st.components.v1.html(drift_html.decode("utf-8"), height=700, scrolling=True)
+
+
+# ============================================================================
+#  PAGE : ÉTAPES SUIVANTES
+# ============================================================================
+def page_next_steps():
+    st.title("🛣️ Étapes suivantes")
+
+    st.markdown("""
+    ### Monitoring infrastructure — Prometheus & Grafana
+
+    - Exposer les métriques de l'API (`/metrics`) via
+      `prometheus-fastapi-instrumentator`
+    - Dashboards Grafana pour la **latence**, le **taux d'erreurs** et le
+      **nombre de requêtes** par endpoint
+    - Définition d'**alertes** (ex : latence > 2s, taux d'erreur 5xx > 5%)
+    - Utilisation du **webhook Grafana** pour déclencher automatiquement un
+      réentraînement en cas d'anomalie détectée sur l'API
+
+    ### Automatisation de l'entraînement
+
+    - **Cron / Airflow** pour planifier :
+      - le **monitoring Evidently** (ex : quotidien)
+      - le **réentraînement** si drift détecté
+      - l'**export DVC** des nouvelles données
+
+    ### Nouvelles données
+
+    - Le dataset BAAC est mis à jour **annuellement** sur data.gouv.fr
+    - Pipeline d'ingestion incrémentale : nouvelles années → `fill_database.py`
+      → nouveau `dvc add` → nouveau training automatique
+
+    ### Kubernetes 
+
+    - Migration de `docker-compose` vers des manifests Kubernetes
+    - Scalabilité horizontale de l'API selon la charge
+    - Utile si le projet doit servir plusieurs centaines de requêtes/seconde
+    """)
+
+
+# ============================================================================
+#  PAGE : CONCLUSION
+# ============================================================================
+def page_conclusion():
+    st.title("✅ Conclusion")
+
+    st.markdown("""
+    Ce projet illustre une chaîne **MLOps complète et fonctionnelle** :
+
+    - **Données** : PostgreSQL alimenté automatiquement depuis le dataset BAAC
+    - **Modèle** : XGBoost binaire optimisé pour la détection des accidents mortels
+    - **Suivi** : MLflow (tracking, registry, comparaison automatique de versions)
+    - **Versionning** : DVC pour les données et les modèles, hash tracés dans MLflow
+    - **Orchestration** : Docker Compose, 5 services interconnectés
+    - **CI/CD** : GitHub Actions (lint, tests, build, déploiement)
+    - **Monitoring** : Evidently (data drift, performance) avec retraining automatique
+    - **Interface** : cette application Streamlit
+
+    ### Points forts
+    - Pipeline **reproductible** de bout en bout
+    - **Traçabilité totale** : chaque modèle est lié à sa version de données et à ses métriques
+    - **Boucle de feedback automatisée** entre monitoring et réentraînement
+
+    ### Limites actuelles
+    - Monitoring infrastructure (Prometheus/Grafana) pas encore en place
+    - Pas d'automatisation planifiée (cron/Airflow) du monitoring
+    - Authentification API à renforcer (OAuth2 complet)
+
+    Merci de votre attention 🙏
+    """)
+
+
+# ============================================================================
+#  NAVIGATION
+# ============================================================================
+PAGES = {
+    "📖 Introduction":         page_intro,
+    "🏗️ Fondations":           page_fondations,
+    "🧠 Scripts ML":           page_scripts_ml,
+    "📡 Suivi MLflow":         page_mlflow,
+    "🐳 Orchestration":        page_orchestration,
+    "🚀 Déploiement CI/CD":    page_cicd,
+    "🔍 Monitoring":           page_monitoring,
+    "🎬 Démo":                 page_demo,
+    "🛣️ Étapes suivantes":     page_next_steps,
+    "✅ Conclusion":           page_conclusion,
+}
+
+st.sidebar.title("🚗 MLOps Accidentologie")
+selection = st.sidebar.radio("Navigation", list(PAGES.keys()))
+
+st.sidebar.markdown("---")
+st.sidebar.caption(f"API : `{API_URL}`")
+if api_status():
+    st.sidebar.success("API connectée")
+else:
+    st.sidebar.error("API non accessible")
+
+PAGES[selection]()
