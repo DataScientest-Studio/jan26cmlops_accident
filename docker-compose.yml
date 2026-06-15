@@ -30,7 +30,8 @@ services:
       retries: 5
 
 
-  db-init:                            
+  db-init:  
+    profiles: ["init"]                          
     build:
       context: .
       dockerfile: Dockerfile
@@ -91,8 +92,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      db-init:                          
-        condition: service_completed_successfully
+      #db-init:                          
+      #  condition: service_completed_successfully
     volumes:
       - ./src:/app/src
       - ./models:/app/models
