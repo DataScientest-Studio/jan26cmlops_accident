@@ -39,6 +39,7 @@ THRESHOLD_FILE = os.path.join(MODELS_DIR, "threshold_focus_tues.pkl")
 # Constantes MLflow
 MLFLOW_TRACKING_URI  = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:8080")
 MODEL_REGISTRY_NAME  = os.getenv("MLFLOW_REGISTRY_NAME", "gravite-focus-tues")
+MLFLOW_EXPERIMENT    = os.getenv("MLFLOW_EXPERIMENT", "accidentologie-focus-tues") 
 
 CONN_PARAMS = {
     "dbname": os.getenv("POSTGRES_DB", "mlops_accidents"),
