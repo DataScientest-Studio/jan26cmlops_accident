@@ -206,6 +206,9 @@ jobs:
         MLFLOW_TRACKING_URI=http://mlflow:8080
         MLFLOW_EXPERIMENT=accidentologie-focus-tues
         MLFLOW_REGISTRY_NAME=gravite-focus-tues
+        MONITORING_SPLIT_YEAR=16
+        DRIFT_SHARE_THRESHOLD=0.3
+        MONITORING_MAX_ROWS=10000
         EOF
 
     - name: Lancer docker-compose
