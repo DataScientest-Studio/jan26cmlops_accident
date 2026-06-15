@@ -140,6 +140,23 @@ jobs:
 
     - uses: actions/checkout@v4
 
+    - name: Créer un .env minimal
+      run: |
+        cat > .env << EOF
+        POSTGRES_PASSWORD=test
+        POSTGRES_USER=postgres
+        POSTGRES_DB=testdb
+        POSTGRES_HOST=db
+        POSTGRES_PORT=5432
+        
+        MLFLOW_TRACKING_URI=http://mlflow:8080
+        MLFLOW_EXPERIMENT=accidentologie-focus-tues_test
+        MLFLOW_REGISTRY_NAME=gravite-focus-tues_test
+
+        MONITORING_SPLIT_YEAR=16
+        DRIFT_SHARE_THRESHOLD=0.3
+        MONITORING_MAX_ROWS=10000
+        EOF
     - name: Vérifier la syntaxe docker-compose
       run: |
         docker compose -f docker-compose.yml config --quiet
