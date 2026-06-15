@@ -35,7 +35,14 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: accident-db-init
-    command: python src/data/database/fill_database.py
+    command: >
+      bash -c "
+      until pg_isready -h db -U postgres; do
+        echo 'Waiting for postgres...';
+        sleep 2;
+      done;
+      python src/data/database/fill_database.py
+      "
     env_file:
       - .env
     volumes:
