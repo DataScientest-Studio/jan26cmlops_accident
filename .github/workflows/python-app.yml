@@ -144,6 +144,8 @@ jobs:
       run: |
         docker compose -f docker-compose.yml config --quiet
         echo "OK : docker-compose.yml est valide"
+      env:
+        POSTGRES_PASSWORD: test
 
     - name: Build de l'image API
       run: |
