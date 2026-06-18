@@ -1,19 +1,12 @@
-# 🚗 MLOps Accidentologie — Prédiction de la gravité des accidents de la route
-
+# MLOps Accidentologie — Prédiction de la gravité des accidents de la route
 Projet MLOps de bout en bout — DataScientest Janvier 2026
-**Équipe** : Chaymae Gasmi, Sébastien Mével, Marc | **Mentor** : Nicolas
-
+Équipe : Chaymae Gasmi, Sébastien Mével, Marc Guezou | Mentor : Nicolas
 ---
-
-## Objectif
-
-Prédire si un usager impliqué dans un accident de la route sera **indemne ou blessé/tué**,
+# Objectif
+Prédire si un usager impliqué dans un accident de la route sera indemne ou blessé/tué,
 avec un focus sur la détection des accidents mortels (classe rare < 2%).
-
 ---
-
-## Lancement rapide
-
+# Lancement rapide
 ```bash
 # Premier lancement (charge les données)
 docker compose --profile init up --build
@@ -21,22 +14,15 @@ docker compose --profile init up --build
 # Lancements suivants
 docker compose up
 ```
-
 ---
-
-## Services
-
-| Service    | URL                        | Description              |
-|------------|----------------------------|--------------------------|
-| API        | http://localhost:8000/docs | Documentation Swagger    |
-| MLflow     | http://localhost:8080      | Suivi des expériences    |
-| Streamlit  | http://localhost:8501      | Interface présentation   |
-| PostgreSQL | localhost:5432             | Base de données          |
-
+# Services
+Service	URL	Description
+API	http://localhost:8000/docs	Documentation Swagger
+MLflow	http://localhost:8080	Suivi des expériences
+Streamlit	http://localhost:8501	Interface présentation
+PostgreSQL	localhost:5432	Base de données
 ---
-
-## Organisation du projet
-
+# Organisation du projet
 ```
 jan26cmlops_accident/
 │
@@ -89,22 +75,18 @@ jan26cmlops_accident/
     └── workflows/
         └── python-app.yml      <- CI/CD GitHub Actions (lint, tests, build)
 ```
-
+---
+# Stack technique
+Composant	Technologie
+Modèle	XGBoost binaire — AUC = 0.8991 — seuil = 0.66
+Base données	PostgreSQL 15
+Tracking ML	MLflow avec backend PostgreSQL
+Versionning	DVC — hash MD5 loggués dans MLflow
+Orchestration	Docker Compose — 5 services
+CI/CD	GitHub Actions — lint + tests + build
+Monitoring	Evidently — retraining auto si drift > 30%
+Interface	Streamlit
 ---
 
-## Stack technique
 
-| Composant     | Technologie                                          |
-|---------------|------------------------------------------------------|
-| Modèle        | XGBoost binaire — AUC = 0.8991 — seuil = 0.66       |
-| Base données  | PostgreSQL 15                                        |
-| Tracking ML   | MLflow avec backend PostgreSQL                       |
-| Versionning   | DVC — hash MD5 loggués dans MLflow                   |
-| Orchestration | Docker Compose — 5 services                          |
-| CI/CD         | GitHub Actions — lint + tests + build                |
-| Monitoring    | Evidently — retraining auto si drift > 30%           |
-| Interface     | Streamlit                                            |
-
----
-
-<p><small>Projet MLOps — DataScientest 2026</small></p>
+<p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
