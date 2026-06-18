@@ -1,53 +1,110 @@
-Project Name
-==============================
+# 🚗 MLOps Accidentologie — Prédiction de la gravité des accidents de la route
 
-This project is a starting Pack for MLOps projects based on the subject "movie_recommandation". It's not perfect so feel free to make some modifications on it.
+Projet MLOps de bout en bout — DataScientest Janvier 2026
+**Équipe** : Chaymae Gasmi, Sébastien Mével, Marc | **Mentor** : Nicolas
 
-Project Organization
-------------
+---
 
-    ├── LICENSE
-    ├── README.md          <- The top-level README for developers using this project.
-    ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
-    │   └── raw            <- The original, immutable data dump.
-    │
-    ├── logs               <- Logs from training and predicting
-    │
-    ├── models             <- Trained and serialized models, model predictions, or model summaries
-    │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
-    │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-    │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
-    │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── src                <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
-    │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
-    │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
-    │   │
-    │   ├── models         <- Scripts to train models and then use trained models to make
-    │   │   │                 predictions
-    │   │   ├── predict_model.py
-    │   │   └── train_model.py
-    │   │
-    │   ├── visualization  <- Scripts to create exploratory and results oriented visualizations
-    │   │   └── visualize.py
-    │   └── config         <- Describe the parameters used in train_model.py and predict_model.py
+## Objectif
 
---------
+Prédire si un usager impliqué dans un accident de la route sera **indemne ou blessé/tué**,
+avec un focus sur la détection des accidents mortels (classe rare < 2%).
 
-<p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
+---
+
+## Lancement rapide
+
+```bash
+# Premier lancement (charge les données)
+docker compose --profile init up --build
+
+# Lancements suivants
+docker compose up
+```
+
+---
+
+## Services
+
+| Service    | URL                        | Description              |
+|------------|----------------------------|--------------------------|
+| API        | http://localhost:8000/docs | Documentation Swagger    |
+| MLflow     | http://localhost:8080      | Suivi des expériences    |
+| Streamlit  | http://localhost:8501      | Interface présentation   |
+| PostgreSQL | localhost:5432             | Base de données          |
+
+---
+
+## Organisation du projet
+
+```
+jan26cmlops_accident/
+│
+├── README.md                   <- Ce fichier
+├── .env                        <- Variables d'environnement (non versionné)
+├── .gitignore
+│
+├── Dockerfile                  <- Conteneur API FastAPI et db-init
+├── Dockerfile.streamlit        <- Conteneur Streamlit
+├── docker-compose.yml          <- Orchestration des 5 services Docker
+│
+├── requirements.docker.txt     <- Dépendances Python pour Docker (Linux)
+├── requirements.streamlit.txt  <- Dépendances Streamlit
+├── requirements.txt            <- Dépendances Python complètes
+│
+├── streamlit_app.py            <- Application Streamlit (présentation)
+│
+├── data_kaggle/                <- CSV BAAC (non versionnés sur Git)
+│   ├── CARACTERISTICS.csv      <- Conditions de l'accident (date, météo, lieu...)
+│   ├── PLACES.csv              <- Type de route, infrastructure...
+│   ├── VEHICLES.csv            <- Informations sur les véhicules
+│   ├── USERS.csv               <- Usagers impliqués et gravité
+│   └── HOLIDAYS.csv            <- Jours fériés et vacances scolaires
+│
+├── models/                     <- Modèles entraînés
+│   ├── model_focus_tues.pkl    <- Modèle XGBoost en production
+│   └── threshold_focus_tues.pkl <- Seuil optimal de décision (0.66)
+│
+├── reports/                    <- Rapports générés
+│   ├── figures/                <- Graphiques (ROC, PR, Feature Importance...)
+│   ├── data_drift.html         <- Rapport Evidently data drift
+│   └── model_performance.html  <- Rapport Evidently performance
+│
+├── src/
+│   ├── data/
+│   │   └── database/
+│   │       ├── create_table.sql    <- Création des tables PostgreSQL
+│   │       ├── init_mlflow_db.sql  <- Création base mlflow_tracking
+│   │       └── fill_database.py    <- Chargement des CSV dans PostgreSQL
+│   │
+│   └── models/
+│       ├── api.py              <- API FastAPI (tous les endpoints)
+│       ├── training_v2.py      <- Pipeline d'entraînement XGBoost (9 phases)
+│       ├── predict_v2.py       <- Script de prédiction
+│       └── monitoring.py       <- Monitoring Evidently (data drift)
+│
+├── tests/                      <- Tests unitaires (pytest)
+│
+└── .github/
+    └── workflows/
+        └── python-app.yml      <- CI/CD GitHub Actions (lint, tests, build)
+```
+
+---
+
+## Stack technique
+
+| Composant     | Technologie                                          |
+|---------------|------------------------------------------------------|
+| Modèle        | XGBoost binaire — AUC = 0.8991 — seuil = 0.66       |
+| Base données  | PostgreSQL 15                                        |
+| Tracking ML   | MLflow avec backend PostgreSQL                       |
+| Versionning   | DVC — hash MD5 loggués dans MLflow                   |
+| Orchestration | Docker Compose — 5 services                          |
+| CI/CD         | GitHub Actions — lint + tests + build                |
+| Monitoring    | Evidently — retraining auto si drift > 30%           |
+| Interface     | Streamlit                                            |
+
+---
+
+<p><small>Projet MLOps — DataScientest 2026</small></p>
