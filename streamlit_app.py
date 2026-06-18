@@ -424,8 +424,11 @@ def page_orchestration():
 
     st.markdown("---")
     st.subheader("Architecture globale")
-
-
+    img = api_get_bytes("/reports/figures/architecture.png")
+    if img:
+        st.image(img, use_column_width=True)
+    else:
+        st.info("Schéma d'architecture non disponible.")
 
 # ============================================================================
 #  PAGE : DÉPLOIEMENT CI/CD
