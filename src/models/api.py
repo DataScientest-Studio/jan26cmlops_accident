@@ -17,6 +17,7 @@ from src.models.training_v2 import (
     MODEL_REGISTRY_NAME,
 )
 from src.models.predict_v2 import predict_model
+from src.models.predict_test import predict_model as predict_model_test
 
 api = FastAPI(
     title="API - Prédiction de la sévérité d'un accident",
@@ -41,6 +42,16 @@ def training_endpoint():
     """Lance l'entraînement du modèle XGBoost."""
     try:
         result = train_model()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.post("/predict-test/")
+def predict_test_endpoint():
+    """Lance les prédictions sur 100k lignes (version test)."""
+    try:
+        result = predict_model_test()
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
