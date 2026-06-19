@@ -1,0 +1,145 @@
+  [DEBUG] REPO_ROOT  : /app
+  [DEBUG] DATA_DIR   : /app/src/data
+  [DEBUG] MODELS_DIR : /app/models
+  [DEBUG] CWD        : /app
+  [DEBUG] users count : 1851323
+  [DEBUG] carac count : 839985
+
+======================================================================
+======================================================================
+  PHASE 1 : Chargement PostgreSQL + jointure holidays
+======================================================================
+  holidays : 131 lignes
+  users        :  1,851,323 lignes
+  carac        :    839,985 lignes
+  places       :    839,985 lignes
+  vehicles     :  1,433,389 lignes
+  Apres jointure principale : 1,851,323 lignes x 51 colonnes
+  Jours feries trouves : 35,608
+  Apres dedup : 1,851,323 lignes
+  Checkpoint sauve : /app/src/data/checkpoint_01_raw.parquet
+  Duree phase 1 : 39.6s
+  CSV deja present : /app/src/data/caracteristics.csv
+  CSV deja present : /app/src/data/places.csv
+  CSV deja present : /app/src/data/vehicles.csv
+  CSV deja present : /app/src/data/users.csv
+
+======================================================================
+  PHASE 2 : Nettoyage + feature engineering + cible binaire
+======================================================================
+  lat : 0 valeurs 0 -> NaN (lignes conservees)
+  long : 0 valeurs 0 -> NaN (lignes conservees)
+  adr : 23 valeurs '-' converties en -1
+  long : 7,051 valeurs '-' converties en -1
+  Feature 'age' creee (mediane = nan)
+  Feature 'heure' creee (0-23)
+  Feature 'is_weekend' creee (527,228 weekend)
+  Cible binaire :
+    grav_bin=0 (Indemne) :    757,431
+    grav_bin=1 (Reste)   :  1,093,892
+      dont Tues (grav=2) :     49,939
+      dont Hospit (grav=3):    388,004
+      dont Legers (grav=4):    655,949
+  Lignes finales : 1,851,323 (vs 1,851,323 avant nettoyage)
+  Checkpoint sauve : /app/src/data/checkpoint_02_clean.parquet
+  Duree phase 2 : 38.9s
+
+======================================================================
+  PHASE 3 : Correlations Cramer's V avec grav_bin
+======================================================================
+  Variable                    Cramer V
+  ------------------------- ----------
+  secu                          0.4612
+  catv                          0.3906
+  place                         0.2723
+  catu                          0.2723
+  manv                          0.2520
+  actp                          0.2328
+  etatp                         0.2308
+  locp                          0.2249
+  obs                           0.1895
+  choc                          0.1850
+  col                           0.1735
+  an_nais                       0.1631
+  trajet                        0.1613
+  obsm                          0.1607
+  situ                          0.1093
+  hrmn                          0.0870
+  sexe                          0.0804
+  plan                          0.0733
+  agg                           0.0732
+  catr                          0.0609
+
+  Features selectionnees (V > 0.01) : 36
+  Duree phase 3 : 2.6s
+
+======================================================================
+  PHASE 4 : Entrainement XGBoost avec sample weights focus tues
+======================================================================
+  Features : 36 colonnes
+  Echantillons : 1,851,323
+  Train : 1,481,058 | Test : 370,265
+  Poids : Tue=x8.0, Hospit=x2.0, Leger=x1.5, Indemne=x1.0
+  Checkpoint modele : /app/models/checkpoint_03_model_intermed.pkl
+  Duree phase 4 : 14.0s
+
+======================================================================
+  PHASE 5 : Evaluation globale + focus Tues
+======================================================================
+
+  --- Metriques globales (seuil=0.5) ---
+  Accuracy  : 0.8063
+  F1 macro  : 0.7915
+  Precision : 0.7941
+  Recall    : 0.9075
+  AUC-ROC   : 0.8991
+
+  --- Classification Report ---
+              precision    recall  f1-score   support
+
+     Indemne       0.83      0.66      0.74    151486
+       Reste       0.79      0.91      0.85    218779
+
+    accuracy                           0.81    370265
+   macro avg       0.81      0.78      0.79    370265
+weighted avg       0.81      0.81      0.80    370265
+
+  --- Focus TUES (grav=2) ---
+  Tues dans le test set : 10104
+  Tues detectes (pred=1) : 9943
+  Recall Tues (seuil=0.5) : 0.9841
+
+======================================================================
+  PHASE 6 : Optimisation du seuil (recall Tues >= 75%)
+======================================================================
+  Seuil optimal : 0.66
+  Accuracy      : 0.8166
+  F1 macro      : 0.8115
+  Precision     : 0.8552
+  Recall global : 0.8302
+  Recall Tues   : 0.9551
+
+  --- Classification Report (seuil=0.66) ---
+              precision    recall  f1-score   support
+
+     Indemne       0.76      0.80      0.78    151486
+       Reste       0.86      0.83      0.84    218779
+
+    accuracy                           0.82    370265
+   macro avg       0.81      0.81      0.81    370265
+weighted avg       0.82      0.82      0.82    370265
+
+
+======================================================================
+  PHASE 7 : Visualisations
+======================================================================
+  ROC curve : /app/reports/figures/roc_curve_focus_tues.png
+  PR curve  : /app/reports/figures/pr_curve_focus_tues.png
+  Feature importance : /app/reports/figures/feature_importance_focus_tues.png
+  Confusion matrix : /app/reports/figures/confusion_matrix_focus_tues.png
+
+======================================================================
+  PHASE 9 : Sauvegarde finale
+======================================================================
+  Modele   : /app/models/model_focus_tues.pkl
+  Seuil    : /app/models/threshold_focus_tues.pkl

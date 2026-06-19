@@ -105,10 +105,10 @@ dvc-storage/
 /tmp/
 
 # Modèles et rapports — gérés par DVC
-models/*.pkl
-reports/*.txt
-reports/figures/*.png
-reports/*.html
+#models/*.pkl
+#reports/*.txt
+#reports/figures/*.png
+#reports/*.html
 
 # Fichiers DVC (ceux-ci doivent rester dans Git)
 !models/*.dvc
