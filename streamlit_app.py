@@ -436,7 +436,224 @@ def page_orchestration():
 def page_cicd():
     st.title("🚀 Déploiement & CI/CD")
 
+    st.markdown("""
+    Le pipeline **CI/CD** est géré par **GitHub Actions** et se déclenche
+    automatiquement à chaque **push** ou **pull request** vers la branche `master`.
 
+    Il est composé de **5 jobs** organisés en deux niveaux :
+    - **4 jobs parallèles** (Tests, Sécurité, DVC, Docker) pour un feedback rapide
+    - **1 job d'intégration** qui ne se lance que si les 4 premiers réussissent
+    """)
+
+    st.markdown("---")
+    st.subheader("🔄 Architecture du pipeline")
+
+    st.markdown("""
+    ```
+    ┌─────────────────────────────────────────────────────────────┐
+    │                  Push / Pull Request → master               │
+    └──────────────────────────┬──────────────────────────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+              ▼                ▼                ▼
+    ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+    │  Job 1       │ │  Job 2       │ │  Job 3       │
+    │  Tests &     │ │  Sécurité    │ │  DVC Check   │
+    │  Lint        │ │              │ │              │
+    │  ≈ 57s       │ │  ≈ 8s        │ │  ≈ 15s       │
+    └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
+           │                │                │
+           │       ┌────────────────┐        │
+           │       │  Job 4         │        │
+           │       │  Docker Build  │        │
+           │       │  ≈ 90s         │        │
+           │       └───────┬────────┘        │
+           │               │                 │
+           └───────────────┼─────────────────┘
+                           │
+                    needs: [1,2,3,4]
+                           │
+                           ▼
+                ┌──────────────────┐
+                │  Job 5           │
+                │  Intégration     │
+                │  docker compose  │
+                │  ≈ 120s          │
+                └──────────────────┘
+    ```
+    """)
+
+    st.markdown("---")
+    st.subheader("📋 Détail des 5 jobs")
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "1️⃣ Tests & Lint",
+        "2️⃣ Sécurité",
+        "3️⃣ DVC Check",
+        "4️⃣ Docker Build",
+        "5️⃣ Intégration",
+    ])
+
+    with tab1:
+        st.markdown("#### Job 1 — Tests & Qualité du code")
+        st.markdown("""
+        **Objectif** : vérifier que le code est syntaxiquement correct et
+        que les tests unitaires passent.
+
+        **Étapes** :
+        1. Checkout du code + setup Python 3.11
+        2. Installation des dépendances (`requirements.txt` sans `pywin32` pour Linux)
+        3. **Lint flake8** — détecte les erreurs critiques (imports manquants,
+           variables indéfinies, syntaxe invalide)
+        4. **pytest** — exécute la suite de tests avec couverture de code
+        5. Sauvegarde du rapport de tests en artefact
+
+        **Pourquoi ?** Un import manquant ou une variable indéfinie casse
+        l'application en production. Flake8 bloque le merge immédiatement.
+        """)
+        st.code("""
+# Lint bloquant (erreurs critiques uniquement)
+flake8 . --select=E9,F63,F7,F82 --show-source
+
+# Tests avec couverture
+pytest tests/ -v --cov=src --cov-report=term-missing
+        """, language="bash")
+
+    with tab2:
+        st.markdown("#### Job 2 — Sécurité")
+        st.markdown("""
+        **Objectif** : empêcher la fuite de données sensibles sur le dépôt public.
+
+        **Contrôle 1 — Fichier `.env`** *(bloquant)* :
+        - Vérifie que le fichier `.env` n'est pas commité dans le dépôt
+        - Si détecté → le pipeline échoue immédiatement
+        - Le `.env` contient les mots de passe PostgreSQL, les URLs de services
+
+        **Contrôle 2 — Mots de passe en dur** *(warning)* :
+        - Scanne tous les fichiers Python de `src/` avec une regex
+        - Cherche les patterns `password = "valeur"` et `"password": "valeur"`
+        - Exclut automatiquement les lignes contenant `os.getenv()` (pattern sécurisé)
+        - Émet un warning sans bloquer le merge (évite les faux positifs)
+        """)
+        st.code("""
+# Contrôle 1 : .env absent du repo
+if [ -f .env ]; then exit 1; fi
+
+# Contrôle 2 : scan des mots de passe en dur
+grep -rn --include="*.py" \\
+  -E "(password|passwd|pwd).*[:=].*['\"]" src/ \\
+  | grep -v "os\\.getenv"
+        """, language="bash")
+
+    with tab3:
+        st.markdown("#### Job 3 — DVC Check")
+        st.markdown("""
+        **Objectif** : valider la configuration DVC et éviter les erreurs de versionning.
+
+        **Vérifications** :
+        1. **`dvc doctor`** — vérifie l'installation et la config
+        2. **Remote DVC** — s'assure que le remote ne pointe pas vers un
+           chemin absolu Windows (`C:\\\\...`), ce qui casserait la CI Linux
+        3. **Cache DVC** — vérifie que `dvc-storage/` n'est pas commité dans
+           Git (c'est arrivé au début du projet : 5 Mo de données binaires)
+        4. **Fichiers `.dvc`** — vérifie qu'il existe des fichiers pointeurs
+           (preuve que les données sont bien suivies par DVC)
+
+        **Contexte** : ce job a été créé suite à un incident réel où le cache
+        DVC et un chemin absolu Windows avaient cassé le pipeline.
+        """)
+
+    with tab4:
+        st.markdown("#### Job 4 — Docker Build")
+        st.markdown("""
+        **Objectif** : vérifier que l'image Docker compile et que le conteneur démarre.
+
+        **Étapes** :
+        1. Création d'un `.env` temporaire avec des valeurs de test
+        2. **Validation** de la syntaxe `docker-compose.yml` (`docker compose config`)
+        3. **Build** de l'image API (`docker build -t accident-api:test .`)
+        4. **Smoke test** : lancement du conteneur et vérification qu'il reste
+           actif pendant 5 secondes (pas de crash au démarrage)
+
+        **Différence avec le Job 5** : ici on teste un seul conteneur isolé.
+        Le job 5 teste l'ensemble des services interconnectés.
+        """)
+
+    with tab5:
+        st.markdown("#### Job 5 — Intégration")
+        st.markdown("""
+        **Objectif** : vérifier que **tous les services fonctionnent ensemble**.
+
+        **Prérequis** : `needs: [tests, security, dvc-check, docker-build]`
+        — ne se lance que si les 4 jobs précédents sont verts.
+
+        **Étapes** :
+        1. Création d'un `.env` complet (PostgreSQL, MLflow, API)
+        2. `docker compose up -d --build` — lance les 3 services
+        3. Attente de 30 secondes pour le démarrage
+        4. **Vérification** que `db`, `mlflow` et `api` sont en état `running`
+        5. **Test HTTP** : curl sur `http://localhost:8000/docs` avec 12 tentatives
+           espacées de 5 secondes (timeout total : 60s)
+        6. `docker compose down -v` — nettoyage systématique
+
+        **C'est le test le plus critique** : il valide que PostgreSQL, MLflow
+        et l'API communiquent correctement via le réseau Docker `mlops-net`.
+        """)
+
+    st.markdown("---")
+    st.subheader("📊 Résultats du dernier pipeline")
+
+    results = {
+        "Job": ["Tests & Lint", "Sécurité", "DVC Check", "Docker Build", "Intégration"],
+        "Durée": ["~57s", "~8s", "~15s", "~90s", "~120s"],
+        "Statut": ["✅ Passed", "✅ Passed", "✅ Passed", "✅ Passed", "✅ Passed"],
+        "Détail": [
+            "flake8 OK, pytest 100% pass",
+            ".env absent, aucun password en dur",
+            "Remote OK, pas de cache commité",
+            "Image compile, conteneur stable",
+            "3 services UP, API répond sur /docs",
+        ],
+    }
+    st.table(pd.DataFrame(results))
+
+    st.markdown("---")
+    st.subheader("🛡️ Sécurité du projet")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        **Protection des secrets** :
+        - Fichier `.env` exclu via `.gitignore`
+        - Paramètres sensibles lus via `os.getenv()`
+        - Fichier `.env.example` fourni (sans valeurs réelles)
+        - CI vérifie l'absence de `.env` à chaque push
+        """)
+    with col2:
+        st.markdown("""
+        **Isolation Docker** :
+        - Réseau dédié `mlops-net` entre les services
+        - PostgreSQL non exposé sur l'hôte
+        - Seuls les ports nécessaires sont ouverts (8000, 8080, 8501)
+        - `${VAR:?Required}` empêche le démarrage sans `.env`
+        """)
+
+    st.markdown("---")
+    st.subheader("🔗 Workflow Git")
+
+    st.markdown("""
+    L'équipe travaille avec un workflow **feature branch** :
+
+    1. Chaque développeur crée une branche (`feature/xxx`)
+    2. Le pipeline CI se déclenche automatiquement sur la PR
+    3. Si les 5 jobs sont verts → le merge est autorisé
+    4. Si un job échoue → le bouton Merge reste grisé
+
+    **Exemple vécu** : sur la PR #4, flake8 a détecté une variable indéfinie
+    dans `predict_v2.py` et le docker build a échoué par absence de `.env`.
+    Correction → re-push → pipeline vert → merge autorisé.
+    """)
 
 
 
