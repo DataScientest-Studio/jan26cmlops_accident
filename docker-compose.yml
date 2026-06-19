@@ -95,6 +95,7 @@ services:
       - ./reports:/app/reports                     
       - ./dvc-storage:/app/dvc-storage
       - ./reports:/app/reports 
+      - mlflow-data:/mlflow 
     networks:
       - mlops-net
     restart: on-failure

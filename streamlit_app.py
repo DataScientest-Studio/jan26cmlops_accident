@@ -88,8 +88,6 @@ def page_intro():
 
     Construire une chaîne **MLOps de bout en bout** capable de :
     - prédire la **gravité d'un accident** pour un usager donné,
-    - avec un focus particulier sur la **détection des accidents mortels** (variable
-      la plus critique mais aussi la plus rare),
     - tout en respectant les bonnes pratiques MLOps : reproductibilité, suivi
       d'expériences, versionning, déploiement automatisé et monitoring continu.
 
@@ -191,83 +189,41 @@ def page_fondations():
 #  PAGE : SCRIPTS ML
 # ============================================================================
 def page_scripts_ml():
-    st.title("🧠 Scripts ML - Training & Predict")
-
-    st.markdown("""
-    Le script `training_v2.py` est découpé en **9 phases** indépendantes,
-    exécutées séquentiellement et tracées dans un rapport texte.
-    """)
-
-    with st.expander("📋 Détail des 9 phases du pipeline d'entraînement", expanded=False):
-        st.markdown("""
-        1. **Chargement** PostgreSQL + jointure avec `holidays`
-        2. **Nettoyage** : valeurs `-1` conservées, GPS à 0 → NaN, feature
-           engineering (`age`, `heure`, `is_weekend`, `is_holiday`), cible binaire
-        3. **Sélection de features** par V de Cramer (corrélation avec la cible)
-        4. **Entraînement XGBoost** avec sample weights focus "Tués" (×8)
-        5. **Évaluation globale** (accuracy, F1, AUC) + focus Tués (recall)
-        6. **Optimisation du seuil** de décision (recall Tués ≥ 75%)
-        7. **Visualisations** : ROC, Precision-Recall, Feature Importance, Confusion Matrix
-        8. **MLflow** : tracking, comparaison avec la version Production, promotion
-        9. **Sauvegarde finale** : modèle, seuil, rapport + versionning DVC
-        """)
-
+    st.title("🧠 Scripts ML — Pipeline d'entraînement et de prédiction")
+    st.markdown("Cette section présente le pipeline de Machine Learning mis en œuvre pour la prédiction de la gravité des accidents de la route, de la préparation des données à l'évaluation du modèle.")
     st.markdown("---")
-    st.subheader("📊 Statistiques du dataset")
-
+    st.subheader("📊 Distribution de la variable cible")
+    st.markdown("La variable cible `grav` présente un déséquilibre de classes significatif. La modalité **Tué** (grav=2) représente moins de **2%** des observations, ce qui constitue un défi majeur pour l'apprentissage supervisé et justifie l'adoption d'une stratégie de pondération des échantillons.")
     stats = api_get("/data/stats")
     if stats:
-        c1, c2 = st.columns([1, 1])
-
-        with c1:
-            st.markdown("**Distribution de la gravité (variable cible)**")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Distribution de la gravité**")
             grav_labels = stats["grav_labels"]
-            grav_df = pd.DataFrame({
-                "Gravité": [grav_labels.get(k, k) for k in stats["grav_distribution"]],
-                "Nombre":  list(stats["grav_distribution"].values()),
-            })
+            grav_df = pd.DataFrame({"Gravité": [grav_labels.get(k, k) for k in stats["grav_distribution"]], "Nombre": list(stats["grav_distribution"].values())})
             st.bar_chart(grav_df.set_index("Gravité"))
-
-        with c2:
-            st.markdown("**Nombre d'accidents par année**")
-            year_df = pd.DataFrame({
-                "Année": list(stats["accidents_per_year"].keys()),
-                "Accidents": list(stats["accidents_per_year"].values()),
-            })
+        with col2:
+            st.markdown("**Accidents par année**")
+            year_df = pd.DataFrame({"Année": list(stats["accidents_per_year"].keys()), "Accidents": list(stats["accidents_per_year"].values())})
             st.bar_chart(year_df.set_index("Année"))
-
+    st.markdown("---")
+    st.subheader("🧹 Nettoyage & Feature Engineering")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info("**Nettoyage des données**\n- Remplacement des coordonnées GPS nulles (valeur 0) par des valeurs manquantes (NaN)\n- Conservation des valeurs -1 comme catégorie valide représentant les données non renseignées\n- Encodage des variables catégorielles en variables numériques\n- Reformulation en classification binaire : grav_bin = 0 (Indemne) / grav_bin = 1 (Blessé ou Tué)")
+    with col2:
+        st.success("**Variables construites**\n- age : calculé à partir de la différence entre l'année de l'accident et l'année de naissance\n- heure : extraite de la variable hrmn\n- is_weekend : indicateur binaire (samedi ou dimanche)\n- is_holiday : indicateur binaire issu de la jointure avec la table holidays")
     st.markdown("---")
     st.subheader("🎯 Choix du modèle : XGBoost binaire focus Tués")
-
-    st.markdown("""
-    **Pourquoi XGBoost ?**
-    - Performant sur données tabulaires hétérogènes (catégorielles + numériques)
-    - Gère nativement les valeurs manquantes
-    - Rapide à entraîner même sur ~1,8M de lignes
-
-    **Pourquoi binaire (Indemne vs blessé/tué) plutôt que multi-classes ?**
-    - La classe "Tué" représente moins de 2% des observations
-    - Un modèle multi-classes a tendance à ignorer cette classe rare
-    - La reformulation binaire + sample weights (`Tué ×8`, `Hospitalisé ×2`,
-      `Blessé léger ×1.5`) force le modèle à apprendre les signaux des cas graves
-
-    **Optimisation du seuil de décision**
-
-    Plutôt que le seuil par défaut de 0.5, le script teste tous les seuils entre
-    0.10 et 0.90 et retient celui qui maximise le F1-macro **sous contrainte**
-    `recall_Tués ≥ 75%` et `precision_globale ≥ 55%`.
-    """)
-
+    col1, col2 = st.columns(2)
+    with col1:
+        st.warning("**Justification du choix de XGBoost**\n- Algorithme de gradient boosting adapté aux données tabulaires hétérogènes\n- Gestion native des valeurs manquantes sans imputation préalable\n- Complexité computationnelle adaptée au volume de données (1,8 million d'observations)\n- Compatibilité avec la pondération différentielle des échantillons")
+    with col2:
+        st.error("**Stratégie de pondération des échantillons**\n- Indemne (grav=1) : x1,0\n- Tué (grav=2) : x8,0\n- Hospitalisé (grav=3) : x2,0\n- Blessé léger (grav=4) : x1,5")
+    st.markdown("> **Optimisation du seuil de décision** — Le seuil de classification par défaut (0,5) est remplacé par un seuil optimal déterminé empiriquement. Le seuil retenu **(0,62)** maximise le F1-macro sous la contrainte d'un recall sur la classe Tués supérieur ou égal à 75% et d'une précision globale supérieure ou égale à 55%.")
     st.markdown("---")
-    st.subheader("📈 Visualisations du dernier entraînement")
-
-    figs = {
-        "Courbe ROC":            "roc_curve_focus_tues.png",
-        "Precision-Recall":      "pr_curve_focus_tues.png",
-        "Feature Importance":    "feature_importance_focus_tues.png",
-        "Matrice de confusion":  "confusion_matrix_focus_tues.png",
-    }
-
+    st.subheader("📈 Résultats du dernier entraînement")
+    figs = {"Courbe ROC": "roc_curve_focus_tues.png", "Precision-Recall": "pr_curve_focus_tues.png", "Feature Importance": "feature_importance_focus_tues.png", "Matrice de confusion": "confusion_matrix_focus_tues.png"}
     cols = st.columns(2)
     for i, (label, filename) in enumerate(figs.items()):
         img = api_get_bytes(f"/reports/figures/{filename}")
@@ -276,30 +232,35 @@ def page_scripts_ml():
             if img:
                 st.image(img, use_column_width=True)
             else:
-                st.info("Pas encore généré — lancez un entraînement.")
-
+                st.info("Pas encore généré — lancez un entraînement depuis la page Démo.")
     st.markdown("---")
     st.subheader("🔮 Prédiction")
-    st.markdown("""
-    Le script `predict_v2.py` :
-    1. Charge le modèle en **Production** depuis le MLflow Registry
-       (fallback sur le fichier local si MLflow indisponible)
-    2. Récupère le **seuil optimal** loggué lors de l'entraînement
-    3. Applique le **même preprocessing** que l'entraînement
-    4. Prédit sur les données courantes et calcule le recall sur les "Tués"
-    """)
-
-    if st.button("▶️ Lancer une prédiction", key="predict_ml_page"):
-        with st.spinner("Prédiction en cours..."):
-            result = api_post("/predict/")
-        if result:
-            st.success("Prédiction terminée")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Indemnes prédits", f"{result.get('n_indemne', 0):,}")
-            c2.metric("Bléssés/tués prédits",    f"{result.get('n_non_indemne', 0):,}")
-            c3.metric("Seuil utilisé",    f"{result.get('threshold', 0):.2f}")
-            if result.get("recall_tues") is not None:
-                st.metric("Recall Tués", f"{result['recall_tues']:.2%}")
+    st.markdown("Le script `predict_v2.py` charge le modèle en **Production** depuis MLflow Registry et prédit sur les données courantes.")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("▶️ Predict sur 100k lignes", key="predict_test_page"):
+            with st.spinner("Prédiction en cours..."):
+                result = api_post("/predict-test/")
+            if result:
+                st.success("Prédiction terminée ✅")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Indemnes prédits", f"{result.get('n_indemne', 0):,}")
+                c2.metric("Blessés/tués prédits", f"{result.get('n_non_indemne', 0):,}")
+                c3.metric("Seuil utilisé", f"{result.get('threshold', 0):.2f}")
+                if result.get("recall_tues") is not None:
+                    st.metric("Recall Tués", f"{result['recall_tues']:.2%}")
+    with col2:
+        if st.button("▶️ Predict complet (1.8M)", key="predict_ml_page"):
+            with st.spinner("Prédiction en cours..."):
+                result = api_post("/predict/")
+            if result:
+                st.success("Prédiction terminée ✅")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Indemnes prédits", f"{result.get('n_indemne', 0):,}")
+                c2.metric("Blessés/tués prédits", f"{result.get('n_non_indemne', 0):,}")
+                c3.metric("Seuil utilisé", f"{result.get('threshold', 0):.2f}")
+                if result.get("recall_tues") is not None:
+                    st.metric("Recall Tués", f"{result['recall_tues']:.2%}")
 
 
 # ============================================================================
@@ -728,7 +689,14 @@ def page_demo():
 
     # ── Training ────────────────────────────────────────────────────────────
     with tab1:
-        st.markdown("Relance le pipeline complet (phases 1 à 9). Peut prendre plusieurs minutes.")
+        st.markdown("""
+        L'entraînement du modèle XGBoost est déclenché via l'endpoint `POST /training/`.
+        Le pipeline complet (9 phases) est exécuté : chargement des données depuis PostgreSQL,
+        nettoyage et feature engineering, sélection de features par V de Cramer, entraînement
+        avec pondération des échantillons, évaluation globale, optimisation du seuil de décision,
+        génération des visualisations, tracking MLflow et sauvegarde du modèle via DVC.
+        L'exécution peut prendre plusieurs minutes en fonction du volume de données.
+        """)
         if st.button("▶️ Lancer l'entraînement", key="demo_train"):
             with st.spinner("Entraînement en cours..."):
                 result = api_post("/training/", timeout=1800)
@@ -757,7 +725,12 @@ def page_demo():
 
     # ── Predict ─────────────────────────────────────────────────────────────
     with tab2:
-        st.markdown("Charge le modèle en Production et prédit sur les données courantes.")
+        st.markdown("""
+        Le modèle entraîné est appliqué sur les données courantes afin de prédire
+        la gravité des accidents pour chaque usager impliqué.
+        Le même pipeline de prétraitement que lors de l'entraînement est appliqué
+        afin de garantir la cohérence des prédictions.
+        """)
         if st.button("▶️ Lancer la prédiction", key="demo_predict"):
             with st.spinner("Prédiction en cours..."):
                 result = api_post("/predict/")
@@ -777,7 +750,14 @@ def page_demo():
 
     # ── Monitoring ──────────────────────────────────────────────────────────
     with tab3:
-        st.markdown("Compare les données historiques aux données récentes et détecte le drift.")
+        st.markdown("""
+        Le monitoring est réalisé via la librairie Evidently. Les données sont segmentées
+        en deux périodes : les données historiques (an < 16) constituent la référence,
+        et les données récentes (an ≥ 16) constituent le jeu courant. Un rapport de
+        data drift et un rapport de performance du modèle sont générés automatiquement.
+        Si le taux de drift dépasse le seuil de 30%, un réentraînement automatique
+        est déclenché via l'endpoint `POST /training/`.
+        """)
         if st.button("▶️ Lancer le monitoring", key="demo_monitoring"):
             with st.spinner("Analyse du drift en cours..."):
                 result = api_post("/monitoring/")
@@ -840,31 +820,41 @@ def page_next_steps():
 # ============================================================================
 def page_conclusion():
     st.title("✅ Conclusion")
-
     st.markdown("""
-    Ce projet illustre une chaîne **MLOps complète et fonctionnelle** :
+    Ce projet a abouti à la conception et au déploiement d'une chaîne MLOps de bout en bout
+    dédiée à la prédiction de la gravité des accidents de la route en France. L'objectif central
+    était de construire un système capable non seulement de produire des prédictions fiables, mais
+    également de garantir leur reproductibilité, leur traçabilité et leur maintien en conditions
+    opérationnelles.
 
-    - **Données** : PostgreSQL alimenté automatiquement depuis le dataset BAAC
-    - **Modèle** : XGBoost binaire optimisé pour la détection des accidents mortels
-    - **Suivi** : MLflow (tracking, registry, comparaison automatique de versions)
-    - **Versionning** : DVC pour les données et les modèles, hash tracés dans MLflow
-    - **Orchestration** : Docker Compose, 5 services interconnectés
-    - **CI/CD** : GitHub Actions (lint, tests, build, déploiement)
-    - **Monitoring** : Evidently (data drift, performance) avec retraining automatique
-    - **Interface** : cette application Streamlit
+    Les données issues de la base BAAC, couvrant la période 2005-2016 et représentant près de
+    1,8 million d'usagers impliqués dans des accidents corporels, ont été intégrées dans une base
+    PostgreSQL et versionnées via DVC. Face au déséquilibre marqué de la variable cible — la classe
+    Tué représentant moins de 2% des observations — un modèle XGBoost binaire a été entraîné avec
+    une stratégie de pondération différentielle des échantillons, permettant d'atteindre un recall
+    de 0.92 sur les accidents mortels.
 
-    ### Points forts
-    - Pipeline **reproductible** de bout en bout
-    - **Traçabilité totale** : chaque modèle est lié à sa version de données et à ses métriques
-    - **Boucle de feedback automatisée** entre monitoring et réentraînement
-
-    ### Limites actuelles
-    - Monitoring infrastructure (Prometheus/Grafana) pas encore en place
-    - Pas d'automatisation planifiée (cron/Airflow) du monitoring
-    - Authentification API à renforcer (OAuth2 complet)
-
-    Merci de votre attention 🙏
+    Le suivi des expériences, la gestion des versions du modèle et la promotion automatique du
+    meilleur candidat en production sont assurés par MLflow. L'orchestration des cinq services
+    composant l'infrastructure repose sur Docker Compose, garantissant la portabilité et la
+    reproductibilité de l'environnement d'exécution. La qualité du code est contrôlée en continu
+    via un workflow CI/CD GitHub Actions, tandis que la surveillance du comportement du modèle en
+    production est assurée par Evidently, avec déclenchement automatique d'un réentraînement en
+    cas de drift statistique supérieur à 30%.
     """)
+    st.markdown("""
+    | Composante | Technologie | Description |
+    |---|---|---|
+    | Données | PostgreSQL | Dataset BAAC — 1,8 million d'observations |
+    | Modèle | XGBoost binaire | AUC-ROC = 0.79, Recall Tués = 0.92 |
+    | Suivi | MLflow | Tracking, registry, comparaison de versions |
+    | Versionning | DVC | Hash MD5 tracés dans MLflow |
+    | Orchestration | Docker Compose | 5 services interconnectés |
+    | CI/CD | GitHub Actions | Lint, tests unitaires, build |
+    | Monitoring | Evidently | Data drift, retraining automatique si drift > 30% |
+    | Interface | Streamlit | Présentation interactive du pipeline |
+    """)
+
 
 
 # ============================================================================
