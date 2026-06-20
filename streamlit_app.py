@@ -184,6 +184,13 @@ def page_fondations():
         c3.metric("Véhicules",        f"{stats['table_counts']['vehicles']:,}")
         c4.metric("Usagers",          f"{stats['table_counts']['users']:,}")
 
+    st.markdown("---")
+    st.subheader("Architecture globale")
+    img = api_get_bytes("/reports/figures/architecture.png")
+    if img:
+        st.image(img, use_column_width=True)
+    else:
+        st.info("Schéma d'architecture non disponible.")
 
 # ============================================================================
 #  PAGE : SCRIPTS ML
@@ -233,35 +240,6 @@ def page_scripts_ml():
                 st.image(img, use_column_width=True)
             else:
                 st.info("Pas encore généré — lancez un entraînement depuis la page Démo.")
-    st.markdown("---")
-    st.subheader("🔮 Prédiction")
-    st.markdown("Le script `predict_v2.py` charge le modèle en **Production** depuis MLflow Registry et prédit sur les données courantes.")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("▶️ Predict sur 100k lignes", key="predict_test_page"):
-            with st.spinner("Prédiction en cours..."):
-                result = api_post("/predict-test/")
-            if result:
-                st.success("Prédiction terminée ✅")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Indemnes prédits", f"{result.get('n_indemne', 0):,}")
-                c2.metric("Blessés/tués prédits", f"{result.get('n_non_indemne', 0):,}")
-                c3.metric("Seuil utilisé", f"{result.get('threshold', 0):.2f}")
-                if result.get("recall_tues") is not None:
-                    st.metric("Recall Tués", f"{result['recall_tues']:.2%}")
-    with col2:
-        if st.button("▶️ Predict complet (1.8M)", key="predict_ml_page"):
-            with st.spinner("Prédiction en cours..."):
-                result = api_post("/predict/")
-            if result:
-                st.success("Prédiction terminée ✅")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Indemnes prédits", f"{result.get('n_indemne', 0):,}")
-                c2.metric("Blessés/tués prédits", f"{result.get('n_non_indemne', 0):,}")
-                c3.metric("Seuil utilisé", f"{result.get('threshold', 0):.2f}")
-                if result.get("recall_tues") is not None:
-                    st.metric("Recall Tués", f"{result['recall_tues']:.2%}")
-
 
 # ============================================================================
 #  PAGE : SUIVI MLFLOW
@@ -383,13 +361,7 @@ def page_orchestration():
         synchroniser les fichiers entre la machine hôte et les conteneurs.
         """)
 
-    st.markdown("---")
-    st.subheader("Architecture globale")
-    img = api_get_bytes("/reports/figures/architecture.png")
-    if img:
-        st.image(img, use_column_width=True)
-    else:
-        st.info("Schéma d'architecture non disponible.")
+
 
 # ============================================================================
 #  PAGE : DÉPLOIEMENT CI/CD
@@ -690,7 +662,7 @@ def page_demo():
     # ── Training ────────────────────────────────────────────────────────────
     with tab1:
         st.markdown("""
-        L'entraînement du modèle XGBoost est déclenché via l'endpoint `POST /training/`.
+        L'entraînement du modèle XGBoost est déclenché via l'endpoint `POST /train-test/` qui réalise un training sur 100k lignes (dataset complet = 1.8M).
         Le pipeline complet (9 phases) est exécuté : chargement des données depuis PostgreSQL,
         nettoyage et feature engineering, sélection de features par V de Cramer, entraînement
         avec pondération des échantillons, évaluation globale, optimisation du seuil de décision,
@@ -699,7 +671,7 @@ def page_demo():
         """)
         if st.button("▶️ Lancer l'entraînement", key="demo_train"):
             with st.spinner("Entraînement en cours..."):
-                result = api_post("/training/", timeout=1800)
+                result = api_post("/train-test/", timeout=1800)
             if result:
                 st.success("Entraînement terminé")
                 c1, c2, c3, c4 = st.columns(4)
@@ -708,6 +680,32 @@ def page_demo():
                 c3.metric("AUC-ROC",      f"{result.get('auc_roc', 0):.4f}")
                 c4.metric("Recall Tués",  f"{result.get('recall_tues_opt', 0):.2%}")
                 st.json(result)
+
+                runs_data = api_get("/mlflow/runs")
+                if runs_data and runs_data.get("runs"):
+                    runs = runs_data["runs"]
+
+                    rows = []
+                    for r in runs:
+                        rows.append({
+                            "Run ID":     r["run_id"][:8],
+                            "Type":       r["run_type"],
+                            "Statut":     r["status"],
+                            "F1 macro":   r["metrics"].get("f1_macro_opt", r["metrics"].get("f1_macro")),
+                            "Recall Tués": r["metrics"].get("recall_tues_opt", r["metrics"].get("recall_tues_0.5")),
+                            "Drift share": r["metrics"].get("drift_share"),
+                            "Date":       pd.to_datetime(r["start_time"], unit="ms"),
+                        })
+                    df = pd.DataFrame(rows).sort_values("Date")
+
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+
+                    training_df = df[df["Type"] == "training"].dropna(subset=["F1 macro"])
+                    if len(training_df) > 1:
+                        st.markdown("**Évolution du F1-macro au fil des entraînements**")
+                        st.line_chart(training_df.set_index("Date")[["F1 macro", "Recall Tués"]])
+                else:
+                    st.info("Aucun run trouvé — lancez un entraînement depuis l'onglet Démo.")
 
         st.markdown("**Figures générées lors du dernier entraînement**")
         cols = st.columns(4)
@@ -726,14 +724,14 @@ def page_demo():
     # ── Predict ─────────────────────────────────────────────────────────────
     with tab2:
         st.markdown("""
-        Le modèle entraîné est appliqué sur les données courantes afin de prédire
+        Le modèle entraîné est appliqué sur les données courantes (limitées à 100k lignes) afin de prédire
         la gravité des accidents pour chaque usager impliqué.
         Le même pipeline de prétraitement que lors de l'entraînement est appliqué
         afin de garantir la cohérence des prédictions.
         """)
         if st.button("▶️ Lancer la prédiction", key="demo_predict"):
             with st.spinner("Prédiction en cours..."):
-                result = api_post("/predict/")
+                result = api_post("/predict-test/")
             if result:
                 st.success("Prédiction terminée")
                 c1, c2, c3 = st.columns(3)

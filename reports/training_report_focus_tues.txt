@@ -10,15 +10,15 @@
   PHASE 1 : Chargement PostgreSQL + jointure holidays
 ======================================================================
   holidays : 131 lignes
-  users        :  1,851,323 lignes
-  carac        :    839,985 lignes
-  places       :    839,985 lignes
-  vehicles     :  1,433,389 lignes
-  Apres jointure principale : 1,851,323 lignes x 51 colonnes
-  Jours feries trouves : 35,608
-  Apres dedup : 1,851,323 lignes
+  users        :    100,000 lignes
+  carac        :    100,000 lignes
+  places       :    100,000 lignes
+  vehicles     :    100,000 lignes
+  Apres jointure principale : 100,000 lignes x 51 colonnes
+  Jours feries trouves : 500
+  Apres dedup : 100,000 lignes
   Checkpoint sauve : /app/src/data/checkpoint_01_raw.parquet
-  Duree phase 1 : 39.6s
+  Duree phase 1 : 3.8s
   CSV deja present : /app/src/data/caracteristics.csv
   CSV deja present : /app/src/data/places.csv
   CSV deja present : /app/src/data/vehicles.csv
@@ -29,105 +29,103 @@
 ======================================================================
   lat : 0 valeurs 0 -> NaN (lignes conservees)
   long : 0 valeurs 0 -> NaN (lignes conservees)
-  adr : 23 valeurs '-' converties en -1
-  long : 7,051 valeurs '-' converties en -1
   Feature 'age' creee (mediane = nan)
   Feature 'heure' creee (0-23)
-  Feature 'is_weekend' creee (527,228 weekend)
+  Feature 'is_weekend' creee (28,961 weekend)
   Cible binaire :
-    grav_bin=0 (Indemne) :    757,431
-    grav_bin=1 (Reste)   :  1,093,892
-      dont Tues (grav=2) :     49,939
-      dont Hospit (grav=3):    388,004
-      dont Legers (grav=4):    655,949
-  Lignes finales : 1,851,323 (vs 1,851,323 avant nettoyage)
+    grav_bin=0 (Indemne) :     40,178
+    grav_bin=1 (Non indemne)   :     59,822
+      dont Tues (grav=2) :      3,285
+      dont Hospit (grav=3):     24,596
+      dont Legers (grav=4):     31,941
+  Lignes finales : 100,000 (vs 100,000 avant nettoyage)
   Checkpoint sauve : /app/src/data/checkpoint_02_clean.parquet
-  Duree phase 2 : 38.9s
+  Duree phase 2 : 3.0s
 
 ======================================================================
   PHASE 3 : Correlations Cramer's V avec grav_bin
 ======================================================================
   Variable                    Cramer V
   ------------------------- ----------
-  secu                          0.4612
-  catv                          0.3906
-  place                         0.2723
-  catu                          0.2723
-  manv                          0.2520
-  actp                          0.2328
-  etatp                         0.2308
-  locp                          0.2249
-  obs                           0.1895
-  choc                          0.1850
-  col                           0.1735
-  an_nais                       0.1631
-  trajet                        0.1613
-  obsm                          0.1607
-  situ                          0.1093
-  hrmn                          0.0870
-  sexe                          0.0804
-  plan                          0.0733
-  agg                           0.0732
-  catr                          0.0609
+  secu                          0.4435
+  catv                          0.3620
+  place                         0.2659
+  catu                          0.2652
+  actp                          0.2386
+  etatp                         0.2378
+  manv                          0.2347
+  locp                          0.2321
+  obs                           0.1880
+  obsm                          0.1699
+  trajet                        0.1503
+  an                               nan
+  col                           0.1691
+  an_nais                       0.1670
+  choc                          0.1665
+  hrmn                          0.1241
+  agg                           0.0928
+  gps                              nan
+  situ                          0.1193
+  plan                          0.0806
 
-  Features selectionnees (V > 0.01) : 36
-  Duree phase 3 : 2.6s
+  Features selectionnees (V > 0.01) : 37
+  Duree phase 3 : 0.4s
 
 ======================================================================
   PHASE 4 : Entrainement XGBoost avec sample weights focus tues
 ======================================================================
-  Features : 36 colonnes
-  Echantillons : 1,851,323
-  Train : 1,481,058 | Test : 370,265
+  Features : 37 colonnes
+  Echantillons : 100,000
+  Train : 80,000 | Test : 20,000
   Poids : Tue=x8.0, Hospit=x2.0, Leger=x1.5, Indemne=x1.0
   Checkpoint modele : /app/models/checkpoint_03_model_intermed.pkl
-  Duree phase 4 : 14.0s
+  Duree phase 4 : 19.4s
 
 ======================================================================
   PHASE 5 : Evaluation globale + focus Tues
 ======================================================================
 
   --- Metriques globales (seuil=0.5) ---
-  Accuracy  : 0.8063
-  F1 macro  : 0.7915
-  Precision : 0.7941
-  Recall    : 0.9075
-  AUC-ROC   : 0.8991
+  Accuracy  : 0.7921
+  F1 macro  : 0.7729
+  Precision : 0.7820
+  Recall    : 0.9046
+  AUC-ROC   : 0.8882
 
   --- Classification Report ---
               precision    recall  f1-score   support
 
-     Indemne       0.83      0.66      0.74    151486
-       Reste       0.79      0.91      0.85    218779
+     Indemne       0.81      0.62      0.71      8036
+ Non indemne       0.78      0.90      0.84     11964
 
-    accuracy                           0.81    370265
-   macro avg       0.81      0.78      0.79    370265
-weighted avg       0.81      0.81      0.80    370265
+    accuracy                           0.79     20000
+   macro avg       0.80      0.76      0.77     20000
+weighted avg       0.80      0.79      0.79     20000
 
   --- Focus TUES (grav=2) ---
-  Tues dans le test set : 10104
-  Tues detectes (pred=1) : 9943
-  Recall Tues (seuil=0.5) : 0.9841
+  Tues dans le test set : 680
+  Tues detectes (pred=1) : 675
+  Recall Tues (seuil=0.5) : 0.9926
 
 ======================================================================
   PHASE 6 : Optimisation du seuil (recall Tues >= 75%)
 ======================================================================
-  Seuil optimal : 0.66
-  Accuracy      : 0.8166
-  F1 macro      : 0.8115
-  Precision     : 0.8552
-  Recall global : 0.8302
-  Recall Tues   : 0.9551
+  Seuil optimal : 0.62
+  Accuracy      : 0.8047
+  F1 macro      : 0.7962
+  Precision     : 0.8326
+  Recall global : 0.8430
+  Recall Tues   : 0.9691
 
-  --- Classification Report (seuil=0.66) ---
+  --- Classification Report (seuil=0.62) ---
               precision    recall  f1-score   support
 
-     Indemne       0.76      0.80      0.78    151486
-       Reste       0.86      0.83      0.84    218779
+     Indemne       0.76      0.75      0.75      8036
+ Non indemne       0.83      0.84      0.84     11964
 
-    accuracy                           0.82    370265
-   macro avg       0.81      0.81      0.81    370265
-weighted avg       0.82      0.82      0.82    370265
+    accuracy                           0.80     20000
+   macro avg       0.80      0.80      0.80     20000
+weighted avg       0.80      0.80      0.80     20000
 
 
 ======================================================================

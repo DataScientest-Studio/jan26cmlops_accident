@@ -213,10 +213,10 @@ def predict_model():
 
     # Chargement données PostgreSQL
     conn     = psycopg2.connect(**CONN_PARAMS)
-    users    = pd.read_sql("SELECT * FROM users;",         conn)
-    carac    = pd.read_sql("SELECT * FROM caracteristics;", conn)
-    places   = pd.read_sql("SELECT * FROM places;",        conn)
-    vehicles = pd.read_sql("SELECT * FROM vehicles;",      conn)
+    users    = pd.read_sql("SELECT * FROM users LIMIT 100000;",         conn)
+    carac    = pd.read_sql("SELECT * FROM caracteristics LIMIT 100000;", conn)
+    places   = pd.read_sql("SELECT * FROM places LIMIT 100000;",        conn)
+    vehicles = pd.read_sql("SELECT * FROM vehicles LIMIT 100000;",      conn)
     conn.close()
 
     users.columns    = users.columns.str.lower()
