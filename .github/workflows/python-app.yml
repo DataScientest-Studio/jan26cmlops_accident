@@ -248,3 +248,13 @@ jobs:
     - name: Nettoyage
       if: always()
       run: docker compose down -v
+
+  # ========================================================================
+  # JOB FINAL — Gate pour le ruleset GitHub (required status check "build")
+  # ========================================================================
+  build:
+    runs-on: ubuntu-latest
+    needs: [integration]
+    steps:
+    - name: Pipeline OK
+      run: echo "Tous les checks sont passés"
