@@ -1,0 +1,5 @@
+outs:
+- md5: 7175a78076e02be3874e4a40680cad08
+  size: 71
+  hash: md5
+  path: caracteristics.csv

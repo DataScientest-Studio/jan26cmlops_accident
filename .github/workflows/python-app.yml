@@ -1,64 +1,260 @@
 # ============================================================================
-# Workflow CI : lint + tests sur chaque push/PR vers master
+# Workflow CI/CD : lint, tests, sécurité, DVC, Docker
 # ============================================================================
 name: Python application
 
-# Quand est-ce que ce workflow se declenche ?
 on:
   push:
-    branches: [ "master" ]        # A chaque push sur master
+    branches: [ "master" ]
   pull_request:
-    branches: [ "master" ]        # A chaque PR qui cible master
+    branches: [ "master" ]
 
 permissions:
-  contents: read                  # Le workflow peut lire le code, c'est tout
+  contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest        # Machine virtuelle Linux (gratuite sur GitHub)
 
+  # ========================================================================
+  # JOB 1 — Qualité du code : lint, tests unitaires, couverture
+  # ========================================================================
+  tests:
+    runs-on: ubuntu-latest
     steps:
 
-    # Etape 1 : Telecharger le code du repo
-    - uses: actions/checkout@v4   # v4 au lieu de v3 (v3 deprecated Node.js 20)
+    - uses: actions/checkout@v4
 
-    # Etape 2 : Installer Python 3.11
     - name: Set up Python 3.11
-      uses: actions/setup-python@v5   # v5 au lieu de v3
+      uses: actions/setup-python@v5
       with:
-        python-version: "3.11"        # 3.11 au lieu de 3.10
-                                      # (contourpy==1.3.3 exige >= 3.11)
+        python-version: "3.11"
 
-    # Etape 3 : Installer les dependances
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest pytest-cov    # pytest-cov pour la couverture
-        # Installer requirements.txt en excluant pywin32 (package Windows uniquement)
+        pip install flake8 pytest pytest-cov
         grep -v pywin32 requirements.txt > requirements_ci.txt
         pip install -r requirements_ci.txt
 
-    # Etape 4 : Verifier la syntaxe Python (erreurs graves uniquement)
     - name: Lint with flake8
       run: |
-        # Stopper le build si erreur de syntaxe ou nom non defini
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Le reste = warnings (ne bloque pas le build)
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-    # Etape 5 : Lancer les tests avec couverture
     - name: Test with pytest
       run: |
-        # -v : mode detaille (nom de chaque test)
-        # --tb=short : tracebacks courts (plus lisible dans les logs CI)
-        # --cov=src : mesurer la couverture du code dans src/
-        # Rapport sauvegarde dans rapport_tests.txt pour archivage
         pytest tests/ -v --tb=short --cov=src --cov-report=term-missing | tee rapport_tests.txt
 
-    # Etape 6 : Sauvegarder le rapport de test comme artefact telechargeable
     - name: Save test report
-      if: always()    # meme si les tests echouent, on veut le rapport
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: rapport-tests
         path: rapport_tests.txt
+
+  # ========================================================================
+  # JOB 2 — Sécurité : vérifier qu'aucune donnée confidentielle n'est
+  #         exposée sur le GitHub public
+  # ========================================================================
+  security:
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - name: Vérifier que .env n'est pas commité
+      run: |
+        if [ -f .env ]; then
+          echo "::error::SECURITE : le fichier .env est dans le repo ! Il contient des mots de passe."
+          exit 1
+        fi
+        echo "OK : .env absent du repo"
+
+    - name: Vérifier qu'aucun mot de passe n'est en dur dans le code
+      run: |
+        # Cherche password = "..." et "password": "..." (assignation et dict)
+        # Exclut les lignes avec os.getenv (pattern accepté)
+        FOUND=$(grep -rn --include="*.py" -E "(password|passwd|pwd)[\"\']?\s*[:=]\s*['\"][^'\"]+['\"]" src/ | grep -v "os\.getenv" || true)
+        if [ -n "$FOUND" ]; then
+          echo "::warning::Mots de passe potentiellement en dur détectés :"
+          echo "$FOUND"
+          echo "Pensez à utiliser os.getenv() et .env"
+        else
+          echo "OK : aucun mot de passe en dur détecté"
+        fi
+
+  # ========================================================================
+  # JOB 3 — DVC : vérifier le versioning des données et modèles
+  # ========================================================================
+  dvc-check:
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Installer DVC
+      run: pip install dvc
+
+    - name: Vérifier la config DVC
+      run: |
+        dvc doctor
+        echo "---"
+        dvc remote list
+        echo "---"
+        CONFIG=$(cat .dvc/config)
+        if echo "$CONFIG" | grep -qE "url\s*=\s*[A-Z]:\\\\"; then
+          echo "::error::Le remote DVC pointe vers un chemin absolu Windows !"
+          exit 1
+        fi
+        echo "OK : remote DVC configuré correctement"
+
+    - name: Vérifier que dvc-storage n'est pas dans Git
+      run: |
+        if [ -d "dvc-storage/files" ]; then
+          echo "::error::Le cache DVC (dvc-storage/) est commité dans Git !"
+          echo "Lancez : git rm -r --cached dvc-storage/"
+          exit 1
+        fi
+        echo "OK : dvc-storage/ absent du repo Git"
+
+    - name: Vérifier que les fichiers .dvc existent
+      run: |
+        DVC_FILES=$(find . -name "*.dvc" -not -path "./.dvc/*" | head -20)
+        if [ -z "$DVC_FILES" ]; then
+          echo "::warning::Aucun fichier .dvc trouvé. Les données/modèles sont-ils suivis par DVC ?"
+        else
+          echo "Fichiers DVC trouvés :"
+          echo "$DVC_FILES"
+        fi
+
+  # ========================================================================
+  # JOB 4 — Docker : vérifier que les images compilent
+  # ========================================================================
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - name: Créer un .env minimal
+      run: |
+        cat > .env << EOF
+        POSTGRES_PASSWORD=test
+        POSTGRES_USER=postgres
+        POSTGRES_DB=testdb
+        POSTGRES_HOST=db
+        POSTGRES_PORT=5432
+        
+        MLFLOW_TRACKING_URI=http://mlflow:8080
+        MLFLOW_EXPERIMENT=accidentologie-focus-tues_test
+        MLFLOW_REGISTRY_NAME=gravite-focus-tues_test
+
+        MONITORING_SPLIT_YEAR=16
+        DRIFT_SHARE_THRESHOLD=0.3
+        MONITORING_MAX_ROWS=10000
+        EOF
+    - name: Vérifier la syntaxe docker-compose
+      run: |
+        docker compose -f docker-compose.yml config --quiet
+        echo "OK : docker-compose.yml est valide"
+      env:
+        POSTGRES_PASSWORD: test
+
+    - name: Build de l'image API
+      run: |
+        docker build -t accident-api:test .
+        echo "OK : Dockerfile compile avec succès"
+
+    - name: Vérifier que l'image démarre
+      run: |
+        docker run --rm -d --name api-test \
+          -e POSTGRES_HOST=localhost \
+          -e POSTGRES_PASSWORD=test \
+          accident-api:test
+        sleep 5
+        if docker ps | grep -q api-test; then
+          echo "OK : le conteneur API démarre sans crash"
+          docker stop api-test
+        else
+          echo "::error::Le conteneur API a crashé au démarrage"
+          docker logs api-test 2>&1 || true
+          exit 1
+        fi
+
+  # ========================================================================
+  # JOB 5 — Intégration : vérifier que tous les services fonctionnent ensemble
+  # ========================================================================
+  integration:
+    runs-on: ubuntu-latest
+    needs: [tests, security, dvc-check, docker-build]
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - name: Créer le fichier .env pour les tests
+      run: |
+        cat > .env << 'EOF'
+        POSTGRES_DB=mlops_accidents
+        POSTGRES_USER=postgres
+        POSTGRES_PASSWORD=ci_test_password
+        POSTGRES_HOST=db
+        POSTGRES_PORT=5432
+        MLFLOW_TRACKING_URI=http://mlflow:8080
+        MLFLOW_EXPERIMENT=accidentologie-focus-tues
+        MLFLOW_REGISTRY_NAME=gravite-focus-tues
+        MONITORING_SPLIT_YEAR=16
+        DRIFT_SHARE_THRESHOLD=0.3
+        MONITORING_MAX_ROWS=10000
+        EOF
+
+    - name: Lancer docker-compose
+      run: |
+        docker compose up -d --build
+        echo "Attente du démarrage des services..."
+        sleep 30
+
+    - name: Vérifier que les 3 services tournent
+      run: |
+        echo "=== État des services ==="
+        docker compose ps
+        for SERVICE in db mlflow api; do
+          if docker compose ps $SERVICE | grep -q "Up\|running"; then
+            echo "OK : $SERVICE est en marche"
+          else
+            echo "::error::$SERVICE n'est pas en marche"
+            docker compose logs $SERVICE --tail=20
+            exit 1
+          fi
+        done
+
+    - name: Tester que l'API répond
+      run: |
+        for i in $(seq 1 12); do
+          if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs | grep -q "200"; then
+            echo "OK : l'API répond sur /docs"
+            exit 0
+          fi
+          echo "Tentative $i/12 - API pas encore prête..."
+          sleep 5
+        done
+        echo "::error::L'API ne répond pas après 60 secondes"
+        docker compose logs api --tail=30
+        exit 1
+
+    - name: Nettoyage
+      if: always()
+      run: docker compose down -v
+
+  # ========================================================================
+  # JOB FINAL — Gate pour le ruleset GitHub (required status check "build")
+  # ========================================================================
+  build:
+    runs-on: ubuntu-latest
+    needs: [integration]
+    steps:
+    - name: Pipeline OK
+      run: echo "Tous les checks sont passés"

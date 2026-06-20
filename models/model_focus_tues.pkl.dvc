@@ -1,0 +1,5 @@
+outs:
+- md5: 2baee17de6de349130a05a46ddd811b2
+  size: 1896207
+  hash: md5
+  path: model_focus_tues.pkl

@@ -1,6 +1,10 @@
+  [DEBUG] REPO_ROOT  : /app
+  [DEBUG] DATA_DIR   : /app/src/data
+  [DEBUG] MODELS_DIR : /app/models
+  [DEBUG] CWD        : /app
+  [DEBUG] users count : 1851323
+  [DEBUG] carac count : 839985
 
-======================================================================
-  TRAIN_MODEL.PY - XGBoost binaire focus Tues
 ======================================================================
 ======================================================================
   PHASE 1 : Chargement PostgreSQL + jointure holidays
@@ -13,8 +17,12 @@
   Apres jointure principale : 1,851,323 lignes x 51 colonnes
   Jours feries trouves : 35,608
   Apres dedup : 1,851,323 lignes
-  Checkpoint sauve : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\src\data\checkpoint_01_raw.parquet
-  Duree phase 1 : 50.5s
+  Checkpoint sauve : /app/src/data/checkpoint_01_raw.parquet
+  Duree phase 1 : 39.6s
+  CSV deja present : /app/src/data/caracteristics.csv
+  CSV deja present : /app/src/data/places.csv
+  CSV deja present : /app/src/data/vehicles.csv
+  CSV deja present : /app/src/data/users.csv
 
 ======================================================================
   PHASE 2 : Nettoyage + feature engineering + cible binaire
@@ -33,8 +41,8 @@
       dont Hospit (grav=3):    388,004
       dont Legers (grav=4):    655,949
   Lignes finales : 1,851,323 (vs 1,851,323 avant nettoyage)
-  Checkpoint sauve : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\src\data\checkpoint_02_clean.parquet
-  Duree phase 2 : 48.1s
+  Checkpoint sauve : /app/src/data/checkpoint_02_clean.parquet
+  Duree phase 2 : 38.9s
 
 ======================================================================
   PHASE 3 : Correlations Cramer's V avec grav_bin
@@ -63,7 +71,7 @@
   catr                          0.0609
 
   Features selectionnees (V > 0.01) : 36
-  Duree phase 3 : 4.5s
+  Duree phase 3 : 2.6s
 
 ======================================================================
   PHASE 4 : Entrainement XGBoost avec sample weights focus tues
@@ -72,19 +80,19 @@
   Echantillons : 1,851,323
   Train : 1,481,058 | Test : 370,265
   Poids : Tue=x8.0, Hospit=x2.0, Leger=x1.5, Indemne=x1.0
-  Checkpoint modele : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\models\checkpoint_03_model_intermed.pkl
-  Duree phase 4 : 32.8s
+  Checkpoint modele : /app/models/checkpoint_03_model_intermed.pkl
+  Duree phase 4 : 14.0s
 
 ======================================================================
   PHASE 5 : Evaluation globale + focus Tues
 ======================================================================
 
   --- Metriques globales (seuil=0.5) ---
-  Accuracy  : 0.8062
-  F1 macro  : 0.7914
-  Precision : 0.7940
-  Recall    : 0.9074
-  AUC-ROC   : 0.8992
+  Accuracy  : 0.8063
+  F1 macro  : 0.7915
+  Precision : 0.7941
+  Recall    : 0.9075
+  AUC-ROC   : 0.8991
 
   --- Classification Report ---
               precision    recall  f1-score   support
@@ -104,18 +112,18 @@ weighted avg       0.81      0.81      0.80    370265
 ======================================================================
   PHASE 6 : Optimisation du seuil (recall Tues >= 75%)
 ======================================================================
-  Seuil optimal : 0.67
-  Accuracy      : 0.8163
-  F1 macro      : 0.8116
-  Precision     : 0.8589
-  Recall global : 0.8246
-  Recall Tues   : 0.9513
+  Seuil optimal : 0.66
+  Accuracy      : 0.8166
+  F1 macro      : 0.8115
+  Precision     : 0.8552
+  Recall global : 0.8302
+  Recall Tues   : 0.9551
 
-  --- Classification Report (seuil=0.67) ---
+  --- Classification Report (seuil=0.66) ---
               precision    recall  f1-score   support
 
      Indemne       0.76      0.80      0.78    151486
-       Reste       0.86      0.82      0.84    218779
+       Reste       0.86      0.83      0.84    218779
 
     accuracy                           0.82    370265
    macro avg       0.81      0.81      0.81    370265
@@ -125,13 +133,13 @@ weighted avg       0.82      0.82      0.82    370265
 ======================================================================
   PHASE 7 : Visualisations
 ======================================================================
-  ROC curve : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\reports\figures\roc_curve_focus_tues.png
-  PR curve  : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\reports\figures\pr_curve_focus_tues.png
-  Feature importance : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\reports\figures\feature_importance_focus_tues.png
-  Confusion matrix : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\reports\figures\confusion_matrix_focus_tues.png
+  ROC curve : /app/reports/figures/roc_curve_focus_tues.png
+  PR curve  : /app/reports/figures/pr_curve_focus_tues.png
+  Feature importance : /app/reports/figures/feature_importance_focus_tues.png
+  Confusion matrix : /app/reports/figures/confusion_matrix_focus_tues.png
 
 ======================================================================
   PHASE 9 : Sauvegarde finale
 ======================================================================
-  Modele   : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\models\model_focus_tues.pkl
-  Seuil    : C:\Users\sebas\Documents\GitHub\jan26cmlops_accident\models\threshold_focus_tues.pkl
+  Modele   : /app/models/model_focus_tues.pkl
+  Seuil    : /app/models/threshold_focus_tues.pkl

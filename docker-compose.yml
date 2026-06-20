@@ -1,0 +1,115 @@
+networks:
+  mlops-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  mlflow-data:
+
+services:
+
+  db:
+    image: postgres:15
+    container_name: accident-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mlops_accidents}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Variable POSTGRES_PASSWORD requise dans .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./src/data/database/init_mlflow_db.sql:/docker-entrypoint-initdb.d/00_init_mlflow_db.sql
+      - ./src/data/database/create_table.sql:/docker-entrypoint-initdb.d/01_create_tables.sql
+    networks:
+      - mlops-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+  db-init:  
+    profiles: ["init"]                          
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: accident-db-init
+    command: python src/data/database/fill_database.py
+
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+      - ./data_kaggle:/app/data_kaggle  
+    networks:
+      - mlops-net
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"            
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    container_name: accident-mlflow
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Variable POSTGRES_PASSWORD requise dans .env}
+    command: >
+      bash -c "pip install psycopg2-binary --quiet &&
+      mlflow server
+      --host 0.0.0.0
+      --port 8080
+      --backend-store-uri postgresql://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@db:5432/mlflow_tracking
+      --default-artifact-root /mlflow/artifacts
+      --serve-artifacts"
+    ports:
+      - "8080:8080"
+    volumes:
+      - mlflow-data:/mlflow
+    networks:
+      - mlops-net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: accident-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      #db-init:                          
+      #  condition: service_completed_successfully
+    volumes:
+      - ./src:/app/src
+      - ./models:/app/models
+      - ./data_kaggle:/app/data_kaggle
+      - ./reports:/app/reports                     
+      - ./dvc-storage:/app/dvc-storage
+      - ./reports:/app/reports 
+      - mlflow-data:/mlflow 
+    networks:
+      - mlops-net
+    restart: on-failure
+
+  streamlit:
+      build:
+        context: .
+        dockerfile: Dockerfile.streamlit
+      container_name: accident-streamlit
+      ports:
+        - "8501:8501"
+      environment:
+        - API_URL=http://api:8000
+      networks:
+        - mlops-net
+      depends_on:
+        - api
