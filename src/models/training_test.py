@@ -169,10 +169,10 @@ def phase1_load():
 
     conn = psycopg2.connect(**CONN_PARAMS)
 
-    users = pd.read_sql("SELECT * FROM users;", conn)
-    carac = pd.read_sql("SELECT * FROM caracteristics;", conn)
-    places = pd.read_sql("SELECT * FROM places;", conn)
-    vehicles = pd.read_sql("SELECT * FROM vehicles;", conn)
+    users = pd.read_sql("SELECT * FROM users LIMIT 100000;", conn)
+    carac = pd.read_sql("SELECT * FROM caracteristics LIMIT 100000;", conn)
+    places = pd.read_sql("SELECT * FROM places LIMIT 100000;", conn)
+    vehicles = pd.read_sql("SELECT * FROM vehicles LIMIT 100000;", conn)
 
     # Holidays - table chargee par Seb mais jamais jointe
     try:
@@ -615,7 +615,7 @@ def phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_t
             mlflow.log_metric("threshold",       round(float(best_threshold), 4))
 
             mlflow.log_param("feature_cols", str(feature_cols))
-
+            
             # Modèle
             mlflow.xgboost.log_model(model, artifact_path="model")
 
@@ -812,7 +812,7 @@ def train_model():
     dvc_hashes = phase9_save(model, best_threshold, feature_cols)
 
     # Phase 8
-    phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_tue_opt, X_train, X_test, dvc_hashes, feature_cols) 
+    phase8_mlflow(model, acc, f1, auc, recall_tue, best_threshold, f1_opt, rec_tue_opt, X_train, X_test, dvc_hashes,feature_cols ) 
 
     return {
         "status": "training completed",
